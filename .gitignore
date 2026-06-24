@@ -18,3 +18,8 @@ venv/
 
 # Logs
 *.log
+
+# Agent-internal workflow files (not part of the public product)
+CLAUDE.md
+RETROSPECTIVE.md
+.claude/
