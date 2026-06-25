@@ -9,6 +9,7 @@ from typing import Any
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter, OrderHistoryAdapter
 from cartright.shopping_engine.cadence import display_title, group_by_item, infer_window
 from cartright.shopping_engine.db import init_schema
+from cartright.shopping_engine.pricing import Cart, DealEvaluation, build_cart, evaluate_deal
 
 
 @dataclass(frozen=True)
@@ -17,19 +18,6 @@ class ReorderCandidate:
     title: str  # human-readable product label for SMS / review UI
     window_start: str
     window_end: str
-
-
-@dataclass(frozen=True)
-class DealEvaluation:
-    item_id: str
-    is_deal: bool
-    price: float | None
-
-
-@dataclass(frozen=True)
-class Cart:
-    items: list[dict[str, Any]]
-    total: float
 
 
 @dataclass(frozen=True)
@@ -79,10 +67,10 @@ class ShoppingEngine:
         return candidates
 
     def evaluateDeal(self, item_id: str) -> DealEvaluation:
-        raise NotImplementedError
+        return evaluate_deal(item_id, self._catalog.get_price(item_id))
 
     def buildCart(self, item_ids: list[str]) -> Cart:
-        raise NotImplementedError
+        return build_cart(item_ids, self._catalog.get_price)
 
     def recordPreference(
         self, item_id: str, attributes: dict[str, Any], source: str = "explicit"

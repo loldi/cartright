@@ -1,5 +1,3 @@
-from collections.abc import Callable
-
 import pytest
 
 from cartright.shopping_engine import ShoppingEngine
@@ -22,20 +20,6 @@ def test_schema_is_initialized_on_construction(engine: ShoppingEngine) -> None:
     tables = engine._conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
 
     assert any(row["name"] == "preferences" for row in tables)
-
-
-@pytest.mark.parametrize(
-    "call",
-    [
-        lambda engine: engine.evaluateDeal("paper-towels"),
-        lambda engine: engine.buildCart(["paper-towels"]),
-    ],
-)
-def test_public_methods_are_stubbed(
-    engine: ShoppingEngine, call: Callable[[ShoppingEngine], object]
-) -> None:
-    with pytest.raises(NotImplementedError):
-        call(engine)
 
 
 def test_fixture_twilio_adapter_records_sent_sms() -> None:

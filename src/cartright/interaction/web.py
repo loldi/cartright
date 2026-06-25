@@ -4,6 +4,7 @@ from fastapi import FastAPI, Form, Response
 
 from cartright.interaction.conversation import handle_inbound_preference
 from cartright.llm.preferences import PreferenceParser
+from cartright.review.web import review_router
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import TwilioAdapter
 
@@ -34,5 +35,8 @@ def create_app(
         if From == user_number:
             handle_inbound_preference(Body, to=From, parser=parser, engine=engine, twilio=twilio)
         return Response(content=_EMPTY_TWIML, media_type="application/xml")
+
+    # The review-order UI is a separate surface; compose its routes in here.
+    app.include_router(review_router(engine))
 
     return app

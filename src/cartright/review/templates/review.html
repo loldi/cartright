@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cartright — Review your cart</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  </head>
+  <body class="bg-gray-50 text-gray-900">
+    <main class="mx-auto max-w-2xl px-4 py-10">
+      <h1 class="text-2xl font-semibold">Review your cart</h1>
+      <p class="mt-1 text-sm text-gray-600">
+        Nothing is purchased yet. Check the items below, then tap to finish in
+        your Walmart cart.
+      </p>
+
+      {% if cart.items %}
+      <ul class="mt-6 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
+        {% for line in cart.items %}
+        <li class="flex items-start justify-between gap-4 p-4">
+          <div>
+            <p class="font-medium">{{ line.title }}</p>
+            <p class="text-sm text-gray-600">
+              Qty {{ line.quantity }} &times; ${{ "%.2f"|format(line.unit_price) }}
+            </p>
+            {% if line.substitution %}
+            <p class="mt-1 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+              Substitution: {{ line.substitution }}
+            </p>
+            {% endif %}
+          </div>
+          <p class="whitespace-nowrap font-medium">
+            ${{ "%.2f"|format(line.line_total) }}
+          </p>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <div class="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
+        <span class="text-lg font-semibold">Total</span>
+        <span class="text-lg font-semibold">${{ "%.2f"|format(cart.total) }}</span>
+      </div>
+
+      <a
+        href="{{ cta_url }}"
+        class="mt-8 block w-full rounded-lg bg-blue-600 px-4 py-3 text-center font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      >
+        Open in my Walmart cart
+      </a>
+      {% else %}
+      <p class="mt-6 rounded-lg border border-gray-200 bg-white p-4 text-gray-600">
+        Nothing available to review right now.
+      </p>
+      {% endif %}
+    </main>
+  </body>
+</html>
