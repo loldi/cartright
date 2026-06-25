@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,7 +68,27 @@ class ShoppingEngine:
     def recordPreference(
         self, item_id: str, attributes: dict[str, Any], source: str = "explicit"
     ) -> Preference:
-        raise NotImplementedError
+        existing = self.getPreference(item_id)
+        if existing is not None and existing.source == "explicit" and source != "explicit":
+            # An explicit preference is the user's stated intent; nothing the
+            # engine merely inferred is allowed to override it.
+            return existing
+        self._conn.execute(
+            "INSERT OR REPLACE INTO preferences (item_id, attributes, source) VALUES (?, ?, ?)",
+            (item_id, json.dumps(attributes), source),
+        )
+        self._conn.commit()
+        return Preference(item_id=item_id, attributes=attributes, source=source)
 
     def getPreference(self, item_id: str) -> Preference | None:
-        raise NotImplementedError
+        row = self._conn.execute(
+            "SELECT item_id, attributes, source FROM preferences WHERE item_id = ?",
+            (item_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return Preference(
+            item_id=row["item_id"],
+            attributes=json.loads(row["attributes"]),
+            source=row["source"],
+        )

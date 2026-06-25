@@ -30,8 +30,6 @@ def test_schema_is_initialized_on_construction(engine: ShoppingEngine) -> None:
         lambda engine: engine.getReorderCandidates(),
         lambda engine: engine.evaluateDeal("paper-towels"),
         lambda engine: engine.buildCart(["paper-towels"]),
-        lambda engine: engine.recordPreference("paper-towels", {"brand": "Bounty"}),
-        lambda engine: engine.getPreference("paper-towels"),
     ],
 )
 def test_public_methods_are_stubbed(
