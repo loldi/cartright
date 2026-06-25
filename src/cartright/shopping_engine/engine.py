@@ -52,7 +52,10 @@ class ShoppingEngine:
     ) -> None:
         self._order_history = order_history
         self._catalog = catalog
-        self._conn = sqlite3.connect(str(db_path))
+        # check_same_thread=False: the engine is a single-user, single-writer
+        # store reached from FastAPI's request threadpool, so the connection is
+        # touched from threads other than the one that created it.
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         init_schema(self._conn)
 

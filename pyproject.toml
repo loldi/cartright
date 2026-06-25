@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "A texting-based personal shopping agent for Walmart."
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=0.112.0",
     "fastapi>=0.115",
+    "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.32",
 ]
 
