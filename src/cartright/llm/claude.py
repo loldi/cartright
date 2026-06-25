@@ -6,6 +6,8 @@ from typing import Any
 import anthropic
 
 from cartright.llm.preferences import ParsedPreference
+from cartright.shopping_engine.engine import ReorderCandidate
+from cartright.shopping_engine.pricing import DealEvaluation
 
 # The PRD pins the LLM to Claude Sonnet via the Claude API.
 _MODEL = "claude-sonnet-4-6"
@@ -61,3 +63,47 @@ class ClaudePreferenceParser:
             attributes=data["attributes"],
             confirmation=data["confirmation"],
         )
+
+
+_ALERT_SYSTEM = """\
+You are Cartright, a personal shopping assistant who texts the user proactively
+only when something genuinely worth their time has come up. You are given a
+real, already-confirmed deal on something the user is due to reorder. Compose
+one short, friendly SMS announcing it.
+
+- Use ONLY the item, price, and savings figures given to you below - never
+  invent or round a price, a discount, or a timing claim of your own.
+- Include the review link given to you verbatim so the user can open the real
+  itemized cart.
+- Keep it under ~300 characters, like a text from a person, not an ad.
+"""
+
+
+class ClaudeAlertComposer:
+    """Composes a proactive deal-alert SMS with a live Claude completion.
+
+    Satisfies the `AlertComposer` protocol. Every fact in the prompt (price,
+    savings, title, review link) is already-real `ShoppingEngine` output -
+    the LLM only ever rephrases those facts into a friendly SMS, it never
+    decides what the deal is or invents a number itself.
+    """
+
+    def __init__(self, client: anthropic.Anthropic | None = None) -> None:
+        self._client = client or anthropic.Anthropic()
+
+    def compose(self, candidate: ReorderCandidate, deal: DealEvaluation, review_url: str) -> str:
+        assert deal.current_price is not None and deal.reference_price is not None
+        prompt = (
+            f"Item: {candidate.title}\n"
+            f"Current price: ${deal.current_price:.2f}\n"
+            f"Was: ${deal.reference_price:.2f}\n"
+            f"Savings: ${deal.savings:.2f}\n"
+            f"Review link: {review_url}"
+        )
+        response = self._client.messages.create(
+            model=_MODEL,
+            max_tokens=256,
+            system=_ALERT_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return next(block.text for block in response.content if block.type == "text")
