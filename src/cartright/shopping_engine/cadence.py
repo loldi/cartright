@@ -41,7 +41,26 @@ def infer_window(orders: list[dict[str, Any]]) -> ReorderWindow | None:
 
 
 def group_by_item(orders: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Bucket order lines by their stable catalog identifier (`item_id`).
+
+    `item_id` is the Walmart item ID (a 1:1 catalog key), not a human label -
+    it's what the catalog/pricing adapter re-queries later. The human-readable
+    product title lives separately on each order and can drift between orders
+    of the same item; see `display_title`.
+    """
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for o in orders:
         grouped[o["item_id"]].append(o)
     return grouped
+
+
+def display_title(orders: list[dict[str, Any]], item_id: str) -> str:
+    """Pick a human-readable title for an item from its most recent order.
+
+    Walmart product titles drift over time, so the latest order's title is the
+    freshest label to show the user. Falls back to the stable `item_id` when no
+    title is present on the order data.
+    """
+    latest = max(orders, key=lambda o: o["ordered_at"])
+    title = latest.get("title")
+    return title if title else item_id

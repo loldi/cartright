@@ -7,13 +7,14 @@ from pathlib import Path
 from typing import Any
 
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter, OrderHistoryAdapter
-from cartright.shopping_engine.cadence import group_by_item, infer_window
+from cartright.shopping_engine.cadence import display_title, group_by_item, infer_window
 from cartright.shopping_engine.db import init_schema
 
 
 @dataclass(frozen=True)
 class ReorderCandidate:
-    item_id: str
+    item_id: str  # stable Walmart catalog identifier; used to re-query pricing
+    title: str  # human-readable product label for SMS / review UI
     window_start: str
     window_end: str
 
@@ -70,6 +71,7 @@ class ShoppingEngine:
             candidates.append(
                 ReorderCandidate(
                     item_id=item_id,
+                    title=display_title(grouped[item_id], item_id),
                     window_start=window.start.isoformat(),
                     window_end=window.end.isoformat(),
                 )

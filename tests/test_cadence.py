@@ -14,8 +14,11 @@ def make_engine(orders: list[dict[str, Any]]) -> ShoppingEngine:
     )
 
 
-def order(item_id: str, ordered_at: str) -> dict[str, Any]:
-    return {"item_id": item_id, "ordered_at": ordered_at}
+def order(item_id: str, ordered_at: str, title: str | None = None) -> dict[str, Any]:
+    o: dict[str, Any] = {"item_id": item_id, "ordered_at": ordered_at}
+    if title is not None:
+        o["title"] = title
+    return o
 
 
 def test_regular_cadence_predicts_window_after_last_order() -> None:
@@ -110,3 +113,29 @@ def test_unsorted_order_history_is_handled() -> None:
     # Same regular-cadence result as the sorted tracer case.
     assert candidates[0].window_start == "2026-03-31"
     assert candidates[0].window_end == "2026-04-02"
+
+
+def test_candidate_keys_on_stable_id_and_carries_latest_title() -> None:
+    # Real order lines carry a stable Walmart item ID plus a messy title that
+    # drifts between orders of the same item. Grouping keys on the ID; the
+    # candidate surfaces the freshest (most recent order's) title for display.
+    engine = make_engine(
+        [
+            order("10295020", "2026-01-01", title="Great Value Paper Towels, 6 Rolls"),
+            order("10295020", "2026-01-31", title="Great Value Paper Towels 6 Double Rolls"),
+        ]
+    )
+
+    candidates = engine.getReorderCandidates()
+
+    assert len(candidates) == 1
+    assert candidates[0].item_id == "10295020"
+    assert candidates[0].title == "Great Value Paper Towels 6 Double Rolls"
+
+
+def test_candidate_title_falls_back_to_item_id_when_untitled() -> None:
+    engine = make_engine([order("10295020", "2026-01-01"), order("10295020", "2026-01-31")])
+
+    candidates = engine.getReorderCandidates()
+
+    assert candidates[0].title == "10295020"
