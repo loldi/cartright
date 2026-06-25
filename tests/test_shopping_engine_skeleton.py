@@ -27,7 +27,6 @@ def test_schema_is_initialized_on_construction(engine: ShoppingEngine) -> None:
 @pytest.mark.parametrize(
     "call",
     [
-        lambda engine: engine.getReorderCandidates(),
         lambda engine: engine.evaluateDeal("paper-towels"),
         lambda engine: engine.buildCart(["paper-towels"]),
     ],

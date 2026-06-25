@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter, OrderHistoryAdapter
+from cartright.shopping_engine.cadence import group_by_item, infer_window
 from cartright.shopping_engine.db import init_schema
 
 
@@ -60,7 +61,20 @@ class ShoppingEngine:
         init_schema(self._conn)
 
     def getReorderCandidates(self) -> list[ReorderCandidate]:
-        raise NotImplementedError
+        candidates: list[ReorderCandidate] = []
+        grouped = group_by_item(self._order_history.get_orders())
+        for item_id in sorted(grouped):
+            window = infer_window(grouped[item_id])
+            if window is None:
+                continue
+            candidates.append(
+                ReorderCandidate(
+                    item_id=item_id,
+                    window_start=window.start.isoformat(),
+                    window_end=window.end.isoformat(),
+                )
+            )
+        return candidates
 
     def evaluateDeal(self, item_id: str) -> DealEvaluation:
         raise NotImplementedError
