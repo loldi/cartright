@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from cartright.shopping_engine import ShoppingEngine
@@ -17,9 +19,7 @@ def engine() -> ShoppingEngine:
 
 
 def test_schema_is_initialized_on_construction(engine: ShoppingEngine) -> None:
-    tables = engine._conn.execute(
-        "SELECT name FROM sqlite_master WHERE type = 'table'"
-    ).fetchall()
+    tables = engine._conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
 
     assert any(row["name"] == "preferences" for row in tables)
 
@@ -34,7 +34,9 @@ def test_schema_is_initialized_on_construction(engine: ShoppingEngine) -> None:
         lambda engine: engine.getPreference("paper-towels"),
     ],
 )
-def test_public_methods_are_stubbed(engine: ShoppingEngine, call) -> None:
+def test_public_methods_are_stubbed(
+    engine: ShoppingEngine, call: Callable[[ShoppingEngine], object]
+) -> None:
     with pytest.raises(NotImplementedError):
         call(engine)
 

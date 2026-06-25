@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter, OrderHistoryAdapter
 from cartright.shopping_engine.db import init_schema
@@ -24,14 +25,14 @@ class DealEvaluation:
 
 @dataclass(frozen=True)
 class Cart:
-    items: list[dict]
+    items: list[dict[str, Any]]
     total: float
 
 
 @dataclass(frozen=True)
 class Preference:
     item_id: str
-    attributes: dict
+    attributes: dict[str, Any]
     source: str  # "inferred" or "explicit"
 
 
@@ -63,7 +64,9 @@ class ShoppingEngine:
     def buildCart(self, item_ids: list[str]) -> Cart:
         raise NotImplementedError
 
-    def recordPreference(self, item_id: str, attributes: dict, source: str = "explicit") -> Preference:
+    def recordPreference(
+        self, item_id: str, attributes: dict[str, Any], source: str = "explicit"
+    ) -> Preference:
         raise NotImplementedError
 
     def getPreference(self, item_id: str) -> Preference | None:

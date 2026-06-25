@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class OrderHistoryAdapter(ABC):
@@ -12,8 +13,7 @@ class OrderHistoryAdapter(ABC):
     """
 
     @abstractmethod
-    def get_orders(self, item_id: str | None = None) -> list[dict]:
-        ...
+    def get_orders(self, item_id: str | None = None) -> list[dict[str, Any]]: ...
 
 
 class CatalogPricingAdapter(ABC):
@@ -24,17 +24,14 @@ class CatalogPricingAdapter(ABC):
     """
 
     @abstractmethod
-    def get_price(self, item_id: str) -> dict:
-        ...
+    def get_price(self, item_id: str) -> dict[str, Any]: ...
 
 
 class TwilioAdapter(ABC):
     """Sends and receives SMS for the single private number this project uses."""
 
     @abstractmethod
-    def send_sms(self, to: str, body: str) -> None:
-        ...
+    def send_sms(self, to: str, body: str) -> None: ...
 
     @abstractmethod
-    def receive_sms(self) -> list[dict]:
-        ...
+    def receive_sms(self) -> list[dict[str, Any]]: ...
