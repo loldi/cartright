@@ -17,10 +17,6 @@ from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
 # internal knowledge anywhere in this code.
 DEFAULT_BASE_URL = "https://developer.api.walmart.com/api-proxy/service/affil/product/v2"
 
-# Per the docs the auth signature has a 180s TTL; a fresh signature is built on
-# every request, so this is only a sanity ceiling, not something we lean on.
-_SIGNATURE_TTL_SECONDS = 180
-
 # Walmart's documented out-of-stock sentinel in the `stock` field; the other
 # documented values (Available / Limited Supply / Last few items) all mean buyable.
 _OUT_OF_STOCK = "Not available"
@@ -43,20 +39,31 @@ class WalmartCredentials:
     def from_env(cls) -> WalmartCredentials:
         """Load credentials from the environment for production wiring.
 
-        `WM_PRIVATE_KEY` holds the PEM-encoded PKCS#8 RSA private key (the same
-        key whose public half was uploaded to the Walmart developer portal).
+        `WM_PRIVATE_KEY` holds the PKCS#8 RSA private key whose public half was
+        uploaded to the Walmart developer portal, in either form the docs/tools
+        produce: a PEM block (`-----BEGIN PRIVATE KEY-----`) or the raw
+        base64-encoded DER the docs literally describe ("PKCS#8, base64-encoded").
         """
-        key = serialization.load_pem_private_key(
-            os.environ["WM_PRIVATE_KEY"].encode("utf-8"), password=None
-        )
-        if not isinstance(key, rsa.RSAPrivateKey):
-            raise TypeError("WM_PRIVATE_KEY must be an RSA private key")
+        key = _load_private_key(os.environ["WM_PRIVATE_KEY"])
         return cls(
             consumer_id=os.environ["WM_CONSUMER_ID"],
             key_version=os.environ.get("WM_KEY_VERSION", "1"),
             private_key=key,
             publisher_id=os.environ.get("WM_PUBLISHER_ID"),
         )
+
+
+def _load_private_key(raw: str) -> rsa.RSAPrivateKey:
+    """Parse the configured private key, accepting PEM or base64 DER PKCS#8."""
+    raw = raw.strip()
+    if "-----BEGIN" in raw:
+        key = serialization.load_pem_private_key(raw.encode("utf-8"), password=None)
+    else:
+        # Raw base64-encoded DER, as the docs describe the key ("base64-encoded").
+        key = serialization.load_der_private_key(base64.b64decode(raw), password=None)
+    if not isinstance(key, rsa.RSAPrivateKey):
+        raise TypeError("WM_PRIVATE_KEY must be an RSA private key")
+    return key
 
 
 def _sign(consumer_id: str, timestamp_ms: str, key_version: str, key: rsa.RSAPrivateKey) -> str:

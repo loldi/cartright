@@ -201,6 +201,24 @@ def test_from_env_loads_pem_key_and_credentials(monkeypatch: pytest.MonkeyPatch)
     assert isinstance(creds.private_key, rsa.RSAPrivateKey)
 
 
+def test_from_env_loads_raw_base64_der_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The docs describe the key as 'PKCS#8, base64-encoded' (DER, no PEM armor)."""
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    der = key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("WM_PRIVATE_KEY", base64.b64encode(der).decode("ascii"))
+    monkeypatch.setenv("WM_CONSUMER_ID", "abc")
+
+    creds = WalmartCredentials.from_env()
+
+    assert creds.key_version == "1"  # default when WM_KEY_VERSION unset
+    assert creds.publisher_id is None
+    assert isinstance(creds.private_key, rsa.RSAPrivateKey)
+
+
 def test_real_adapter_drops_into_the_engine_unchanged() -> None:
     """The whole point: ShoppingEngine doesn't know which adapter it's holding."""
     from cartright.shopping_engine import ShoppingEngine
