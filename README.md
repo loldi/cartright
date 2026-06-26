@@ -32,18 +32,58 @@ behind it.
 
 ## Configuration (production)
 
-The real adapters read their config from the environment:
+All real adapters and the production entrypoint read config from the
+environment. Copy [`.env.example`](.env.example) to `.env` and fill it in (or
+set these as host secrets):
 
 | Variable | Used by | Purpose |
 |---|---|---|
+| `ANTHROPIC_API_KEY` | LLM | Claude API key (preference parsing + alert composition) |
+| `TWILIO_ACCOUNT_SID` | SMS | Twilio account SID |
+| `TWILIO_AUTH_TOKEN` | SMS | Twilio auth token |
+| `TWILIO_FROM_NUMBER` | SMS | the Twilio number Cartright sends from (E.164) |
 | `WM_CONSUMER_ID` | catalog | walmart.io consumer (application) UUID |
 | `WM_KEY_VERSION` | catalog | private-key version (default `"1"`) |
 | `WM_PRIVATE_KEY` | catalog | PEM-encoded PKCS#8 RSA private key for request signing |
 | `WM_PUBLISHER_ID` | catalog | Impact Radius publisher id (optional, for attribution) |
+| `CARTRIGHT_USER_NUMBER` | app | the single private number this instance serves (E.164) |
 | `CARTRIGHT_ORDER_HISTORY_PATH` | order history | path to the structured order-history JSON |
+| `CARTRIGHT_DB_PATH` | engine | file-backed SQLite path (default `cartright.db`) |
+| `CARTRIGHT_REVIEW_BASE_URL` | scheduler | public base URL of `/review`, used in alert links |
+| `CARTRIGHT_RUN_SCHEDULER` | app | `1` to run the alert loop in-process |
+| `CARTRIGHT_SCHEDULER_INTERVAL_SECONDS` | scheduler | alert-loop interval (default `3600`) |
 
-Construct the real adapters via `WalmartCatalogPricingAdapter.from_env()` and
-`JsonFileOrderHistoryAdapter.from_env()`.
+The real adapters expose `from_env()` constructors
+(`WalmartCatalogPricingAdapter`, `JsonFileOrderHistoryAdapter`,
+`TwilioSmsAdapter`); the production entrypoint `cartright.main` wires them all
+together.
+
+## Deployment
+
+`cartright.main:build_app` is a uvicorn factory, so nothing is constructed at
+import and credentials are only needed when the service actually boots:
+
+```bash
+uv run uvicorn cartright.main:build_app --factory --host 0.0.0.0 --port $PORT
+```
+
+With `CARTRIGHT_RUN_SCHEDULER=1`, the same process also runs the proactive alert
+loop in a background thread, so a single always-on instance serves the `/sms`
+webhook, the `/review` page, and the scheduler.
+
+A [`render.yaml`](render.yaml) Blueprint is included for one-click deploy on
+Render (all secrets declared `sync: false`, set in the dashboard). Fly.io or any
+container host works the same way.
+
+### Going live (manual, one-time)
+
+1. Deploy the service and set all secrets from the table above.
+2. In the Twilio console, point the SMS number's **inbound webhook** at
+   `https://<your-host>/sms` (HTTP POST).
+3. Set `CARTRIGHT_REVIEW_BASE_URL` to `https://<your-host>/review`.
+4. Verify end-to-end: text a preference to the Twilio number and confirm a
+   live-Claude confirmation SMS comes back, and/or let an in-window deal fire a
+   proactive alert with a working review link.
 
 ## Deliberately excluded from this repo
 
@@ -75,5 +115,8 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy src tests
 ```
 
 Tests use fixture/fake adapters exclusively — **no test hits a live walmart.io
-endpoint or needs real credentials.** The catalog adapter's HTTP client is
-injectable, so its tests serve canned responses via `httpx.MockTransport`.
+endpoint, sends a real SMS, or makes a real Claude call, and none need real
+credentials.** The catalog adapter's HTTP client and the Twilio adapter's client
+are both injectable, so their tests serve canned responses (`httpx.MockTransport`
+/ a fake Twilio client). The production entrypoint (`cartright.main`) is thin
+wiring with no logic of its own and is intentionally untested.
