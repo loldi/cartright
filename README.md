@@ -58,6 +58,39 @@ The real adapters expose `from_env()` constructors
 `TwilioSmsAdapter`); the production entrypoint `cartright.main` wires them all
 together.
 
+### walmart.io credential setup (one-time)
+
+The catalog adapter authenticates every call with an RSA-signed request, so you
+need a walmart.io Affiliate application and a signing keypair before the
+`WM_*` vars above mean anything. Per the documented setup flow:
+
+1. **Create a Walmart.com account**, then sign in to the
+   [Walmart I/O developer portal](https://walmart.io/) and **create an
+   application** for the Affiliate (Product) API.
+2. **Generate an RSA keypair** locally (2048-bit), as PKCS#8:
+
+   ```bash
+   openssl genrsa -out wm_private.pem 2048
+   openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt \
+     -in wm_private.pem -out wm_private_pkcs8.pem
+   openssl rsa -in wm_private.pem -pubout -out wm_public.pem
+   ```
+
+3. **Upload the public key** (`wm_public.pem`) in the portal. Your
+   `WM_CONSUMER_ID` is issued *after* this, and the key gets a version number
+   (usually `1`) — that's your `WM_KEY_VERSION`.
+4. **Set the secrets:** `WM_CONSUMER_ID` from the portal, `WM_KEY_VERSION` for
+   the uploaded key, and `WM_PRIVATE_KEY` = the contents of
+   `wm_private_pkcs8.pem`. `WM_PRIVATE_KEY` accepts either the PEM block (keep
+   the newlines) or the raw base64 DER the docs describe. `WM_PUBLISHER_ID`
+   (Impact Radius id) is optional, only used for commission attribution.
+
+The signature has a **180-second TTL**, so the host clock must be roughly
+accurate; a stale timestamp returns a "timestamp expired" error. (`zipCode` /
+`storeId` request scoping is optional and not wired — pricing defaults to the
+documented San Bruno location, and `storeId` requires Walmart business-team
+approval.)
+
 ## Deployment
 
 `cartright.main:build_app` is a uvicorn factory, so nothing is constructed at
