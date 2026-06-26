@@ -57,18 +57,41 @@ class Cart:
     total: float
 
 
-def build_cart(item_ids: list[str], get_price: Callable[[str], dict[str, Any]]) -> Cart:
+def _deny_substitution(_item_id: str) -> bool:
+    """Default substitution policy: deny. Substitution is opt-in per the PRD's
+    default-deny trust rule, so a caller that supplies no policy gets no
+    substitutions rather than whatever the catalog happened to offer."""
+    return False
+
+
+def build_cart(
+    item_ids: list[str],
+    get_price: Callable[[str], dict[str, Any]],
+    is_substitution_allowed: Callable[[str], bool] = _deny_substitution,
+) -> Cart:
     """Assemble an itemized cart from current catalog prices.
 
     Only in-stock, priceable items make it into the cart - you can't put
-    something unavailable in front of the user as ready to buy. A line may
-    carry a substitution note when the catalog returned a substitute product.
+    something unavailable in front of the user as ready to buy.
+
+    Substitution is default-deny (PRD trust rule): when the catalog returns a
+    substitute product for an item, it is only allowed onto the cart line if
+    `is_substitution_allowed(item_id)` returns True - i.e. the shopper has an
+    explicit, recorded substitution grant for that item/category. With no
+    grant on file the line is dropped entirely, treated as unavailable just
+    like an out-of-stock item, rather than silently staging a product the
+    shopper never asked for. Dropping (not flagging-and-keeping) also keeps
+    `build_walmart_cart_url` from ever putting an unapproved item_id into the
+    user's real walmart.com cart.
     """
     items: list[CartItem] = []
     total = 0.0
     for item_id in item_ids:
         price = get_price(item_id)
         if not price or not price.get("in_stock", False):
+            continue
+        substitution = price.get("substitution")
+        if substitution is not None and not is_substitution_allowed(item_id):
             continue
         unit_price = float(price["price"])
         quantity = 1
@@ -80,7 +103,7 @@ def build_cart(item_ids: list[str], get_price: Callable[[str], dict[str, Any]]) 
                 unit_price=unit_price,
                 quantity=quantity,
                 line_total=line_total,
-                substitution=price.get("substitution"),
+                substitution=substitution,
             )
         )
         total += line_total

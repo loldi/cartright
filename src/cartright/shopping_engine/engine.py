@@ -70,7 +70,15 @@ class ShoppingEngine:
         return evaluate_deal(item_id, self._catalog.get_price(item_id))
 
     def buildCart(self, item_ids: list[str]) -> Cart:
-        return build_cart(item_ids, self._catalog.get_price)
+        return build_cart(item_ids, self._catalog.get_price, self._substitutionAllowed)
+
+    def _substitutionAllowed(self, item_id: str) -> bool:
+        """Default-deny substitution policy backed by recorded preferences: a
+        substitute is only allowed when the shopper has an explicit, affirmative
+        `substitution_ok` grant on file for the item. No preference, or any
+        preference lacking that grant, means no substitution."""
+        pref = self.getPreference(item_id)
+        return bool(pref and pref.attributes.get("substitution_ok"))
 
     def recordPreference(
         self, item_id: str, attributes: dict[str, Any], source: str = "explicit"
