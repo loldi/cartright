@@ -38,7 +38,7 @@ def test_inbound_preference_is_recorded_and_confirmed() -> None:
     parser = FakeParser(
         ParsedPreference(
             item_id="paper-towels",
-            attributes={"brand": "Bounty", "never_substitute": True},
+            attributes={"brand": "Bounty", "substitution_ok": False},
             confirmation="Got it - always Bounty paper towels, no substitutes.",
         )
     )
@@ -54,7 +54,7 @@ def test_inbound_preference_is_recorded_and_confirmed() -> None:
     pref = engine.getPreference("paper-towels")
     assert pref is not None
     assert pref.source == "explicit"
-    assert pref.attributes == {"brand": "Bounty", "never_substitute": True}
+    assert pref.attributes == {"brand": "Bounty", "substitution_ok": False}
     assert twilio.sent == [{"to": USER, "body": confirmation}]
 
 

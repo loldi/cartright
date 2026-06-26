@@ -68,7 +68,7 @@ def test_cart_skips_unavailable_items() -> None:
     assert cart.total == 8.97
 
 
-def test_cart_line_surfaces_a_substitution_note() -> None:
+def test_cart_line_surfaces_a_substitution_note_when_granted() -> None:
     engine = make_engine(
         {
             "a": {
@@ -80,10 +80,55 @@ def test_cart_line_surfaces_a_substitution_note() -> None:
             }
         }
     )
+    # Default-deny: a substitute only reaches the cart with an explicit grant.
+    engine.recordPreference("a", {"substitution_ok": True}, source="explicit")
 
     cart = engine.buildCart(["a"])
 
     assert cart.items[0].substitution == "Bounty 6-pack was unavailable"
+
+
+def test_cart_drops_substitute_when_no_grant_on_file() -> None:
+    engine = make_engine(
+        {
+            "a": {
+                "item_id": "a",
+                "title": "Great Value Paper Towels, 6 Double Rolls",
+                "price": 8.97,
+                "in_stock": True,
+                "substitution": "Bounty 6-pack was unavailable",
+            },
+            "b": {"item_id": "b", "title": "B", "price": 3.50, "in_stock": True},
+        }
+    )
+    # No preference recorded for "a": absence of a grant must mean no
+    # substitution, so the substitute line is dropped entirely.
+
+    cart = engine.buildCart(["a", "b"])
+
+    assert [line.item_id for line in cart.items] == ["b"]
+    assert cart.total == 3.50
+
+
+def test_cart_drops_substitute_when_grant_is_explicitly_false() -> None:
+    engine = make_engine(
+        {
+            "a": {
+                "item_id": "a",
+                "title": "Great Value Paper Towels, 6 Double Rolls",
+                "price": 8.97,
+                "in_stock": True,
+                "substitution": "Bounty 6-pack was unavailable",
+            }
+        }
+    )
+    # A recorded preference that isn't an affirmative grant is not permission.
+    engine.recordPreference("a", {"brand": "Bounty"}, source="explicit")
+
+    cart = engine.buildCart(["a"])
+
+    assert cart.items == []
+    assert cart.total == 0.0
 
 
 def test_walmart_cart_url_maps_items_and_quantities() -> None:

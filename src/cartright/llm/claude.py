@@ -20,8 +20,12 @@ a structured preference for a single item or category.
 - item_id: a short, stable, lowercase-kebab identifier for the item or category
   the preference is about (e.g. "paper-towels", "coffee", "dish-soap").
 - attributes: the concrete preferences stated, as key/value pairs. Common keys
-  are "brand", "size", "never_substitute". Only include what the user actually
-  said; do not invent attributes.
+  are "brand", "size", and "substitution_ok". Only include what the user
+  actually said; do not invent attributes. Substitution is default-deny: set
+  "substitution_ok": true ONLY when the user explicitly allows a substitute for
+  this item (e.g. "any brand is fine", "sub it if they're out"). A user who says
+  "never substitute" needs no attribute at all - deny is already the default, so
+  just omit it.
 - confirmation: one short, friendly SMS (no more than ~160 chars) confirming
   back what you recorded, in your own voice.
 """
