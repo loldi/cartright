@@ -5,6 +5,7 @@ from cartright.shopping_engine.adapters.fixtures import (
     FixtureCatalogPricingAdapter,
     FixtureOrderHistoryAdapter,
 )
+from cartright.shopping_engine.pricing import Cart, CartItem, build_walmart_cart_url
 
 
 def make_engine(prices: dict[str, dict[str, Any]]) -> ShoppingEngine:
@@ -83,3 +84,23 @@ def test_cart_line_surfaces_a_substitution_note() -> None:
     cart = engine.buildCart(["a"])
 
     assert cart.items[0].substitution == "Bounty 6-pack was unavailable"
+
+
+def test_walmart_cart_url_maps_items_and_quantities() -> None:
+    cart = Cart(
+        items=[
+            CartItem("10295020", "Paper Towels", 8.97, 1, 8.97, None),
+            CartItem("37774610", "Coffee", 6.50, 2, 13.00, None),
+        ],
+        total=21.97,
+    )
+
+    url = build_walmart_cart_url(cart)
+
+    assert url == "https://affil.walmart.com/cart/addToCart?items=10295020_1,37774610_2"
+
+
+def test_walmart_cart_url_for_an_empty_cart_has_no_items_param() -> None:
+    url = build_walmart_cart_url(Cart(items=[], total=0.0))
+
+    assert url == "https://affil.walmart.com/cart/addToCart"
