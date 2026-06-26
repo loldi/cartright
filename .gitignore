@@ -29,3 +29,7 @@ review-sample.html
 
 # Design artifacts, not product code
 Cartright Architecture Deck.pdf
+Cartright Architecture Deck-v2.pdf
+
+# Vendor API docs (reference only, not redistributable)
+io-docs/
