@@ -1,0 +1,46 @@
+# Render Blueprint for Cartright. Deploy via the Render dashboard:
+# New > Blueprint > point at this repo. Secrets (sync: false) are set in the
+# dashboard, never committed. The single web service runs the SMS webhook, the
+# review page, and (with CARTRIGHT_RUN_SCHEDULER=1) the proactive alert loop in
+# a background thread - keeping the whole thing on one always-on instance.
+services:
+  - type: web
+    name: cartright
+    runtime: python
+    plan: starter # smallest always-on tier; the free tier sleeps and would miss alert windows
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn cartright.main:build_app --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: WM_CONSUMER_ID
+        sync: false
+      - key: WM_KEY_VERSION
+        value: "1"
+      - key: WM_PRIVATE_KEY
+        sync: false
+      - key: WM_PUBLISHER_ID
+        sync: false
+      - key: CARTRIGHT_USER_NUMBER
+        sync: false
+      - key: CARTRIGHT_ORDER_HISTORY_PATH
+        sync: false
+      - key: CARTRIGHT_DB_PATH
+        value: /var/data/cartright.db
+      - key: CARTRIGHT_REVIEW_BASE_URL
+        sync: false
+      - key: CARTRIGHT_RUN_SCHEDULER
+        value: "1"
+      - key: CARTRIGHT_SCHEDULER_INTERVAL_SECONDS
+        value: "3600"
+    disk:
+      name: cartright-data
+      mountPath: /var/data
+      sizeGB: 1
