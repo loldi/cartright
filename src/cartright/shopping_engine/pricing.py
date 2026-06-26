@@ -85,3 +85,22 @@ def build_cart(item_ids: list[str], get_price: Callable[[str], dict[str, Any]]) 
         )
         total += line_total
     return Cart(items=items, total=round(total, 2))
+
+
+# Walmart's publicly documented affiliate "Add to Cart" deep link: it stages
+# the given items directly into the *user's own* walmart.com cart for them to
+# complete manually. Building this string performs no request of any kind -
+# nothing in this codebase ever follows it on the user's behalf.
+WALMART_ADD_TO_CART_URL = "https://affil.walmart.com/cart/addToCart"
+
+
+def build_walmart_cart_url(cart: Cart) -> str:
+    """Build a real walmart.com cart deep link from a buildCart() result.
+
+    Approve-then-handoff only: this is a GET-built link the user must
+    manually tap, never a checkout submission performed by this system.
+    """
+    if not cart.items:
+        return WALMART_ADD_TO_CART_URL
+    items_param = ",".join(f"{line.item_id}_{line.quantity}" for line in cart.items)
+    return f"{WALMART_ADD_TO_CART_URL}?items={items_param}"
