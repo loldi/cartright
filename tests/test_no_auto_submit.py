@@ -68,7 +68,7 @@ def test_review_page_cta_is_the_only_way_to_proceed_and_never_auto_redirects() -
     html = render_review(cart)
     # A single anchor the user must tap; no meta-refresh, no client-side
     # auto-navigation, no form that could submit anything on page load.
-    assert "<meta http-equiv=\"refresh\"" not in html.lower()
+    assert '<meta http-equiv="refresh"' not in html.lower()
     assert "<form" not in html.lower()
     assert "window.location" not in html
     assert html.count('class="mt-8 block w-full rounded-lg bg-blue-600') == 1

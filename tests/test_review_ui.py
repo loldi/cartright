@@ -62,10 +62,7 @@ def test_review_has_a_single_cta_link() -> None:
 def test_review_cta_defaults_to_a_real_walmart_cart_link_built_from_the_cart() -> None:
     html = render_review(fixture_cart())
 
-    assert (
-        'href="https://affil.walmart.com/cart/addToCart?items=10295020_1,37774610_1"'
-        in html
-    )
+    assert 'href="https://affil.walmart.com/cart/addToCart?items=10295020_1,37774610_1"' in html
 
 
 def test_review_handles_an_empty_cart() -> None:
@@ -110,6 +107,4 @@ def test_review_route_renders_a_real_built_cart() -> None:
     assert "text/html" in response.headers["content-type"]
     assert "Great Value Paper Towels, 6 Double Rolls" in response.text
     assert "$8.97" in response.text
-    assert (
-        'href="https://affil.walmart.com/cart/addToCart?items=10295020_1"' in response.text
-    )
+    assert 'href="https://affil.walmart.com/cart/addToCart?items=10295020_1"' in response.text
