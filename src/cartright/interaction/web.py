@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI, Form, Response
 
 from cartright.interaction.conversation import handle_inbound_preference
 from cartright.llm.preferences import PreferenceParser
+from cartright.preflight import readiness
 from cartright.review.web import review_router
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import TwilioAdapter
@@ -27,8 +30,11 @@ def create_app(
     app = FastAPI(title="Cartright")
 
     @app.get("/health")
-    def health() -> dict[str, str]:
-        return {"status": "ok"}
+    def health() -> dict[str, object]:
+        """Liveness + a secret-free readiness report of which subsystems are
+        configured. Booleans only, derived from `run_doctor_checks` - this never
+        echoes a secret value and never makes a live call."""
+        return {"status": "ok", **readiness(os.environ)}
 
     @app.post("/sms")
     def inbound_sms(From: str = Form(...), Body: str = Form(...)) -> Response:

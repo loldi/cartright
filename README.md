@@ -122,13 +122,35 @@ container host works the same way.
      the reorder candidates inferred from it.
    - `cartright sms-check <your-number>` — sends one real test SMS; confirm it
      arrives.
-3. Deploy the service and set all secrets from the table above.
+3. Deploy the service and set all secrets from the table above. Then confirm
+   `https://<your-host>/health` returns `200` with every `*_configured` field
+   `true` (it's a secret-free readiness report, booleans only), and that
+   `https://<your-host>/review?item=<id>` renders for a known item.
 4. In the Twilio console, point the SMS number's **inbound webhook** at
    `https://<your-host>/sms` (HTTP POST).
 5. Set `CARTRIGHT_REVIEW_BASE_URL` to `https://<your-host>/review`.
 6. Verify end-to-end: text a preference to the Twilio number and confirm a
    live-Claude confirmation SMS comes back, and/or let an in-window deal fire a
    proactive alert with a working review link.
+
+### Secure operations
+
+This service holds four sets of real credentials (Anthropic, Twilio, walmart.io,
+plus your personal order history). Once it's live:
+
+- **Enable 2FA** on Render, Twilio, Anthropic, and the Walmart developer portal,
+  and restrict who can view the host dashboard / environment. Whoever can read
+  the host's env or shell into the instance has every credential.
+- **Rotate keys** if dashboard access ever changes hands.
+- **Treat the persistent disk as sensitive.** The order-history JSON is personal
+  PII (your purchase history) and the SQLite DB holds your preferences. Don't
+  sync either anywhere public.
+- **Never enable `httpx` / `urllib3` DEBUG logging or rich-traceback-with-locals
+  in production.** Normal tracebacks don't include local values, so the walmart
+  request signature and the Twilio auth header stay out of your logs; those
+  tools would change that. The app itself does no logging and returns generic
+  `500`s (no stack traces to clients).
+- **Keep dependencies pinned** (`uv.lock` with hashes); update deliberately.
 
 ## Deliberately excluded from this repo
 

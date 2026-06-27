@@ -17,7 +17,8 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cartright.cli import CheckResult, main, run_doctor_checks
+from cartright.cli import main
+from cartright.preflight import CheckResult, run_doctor_checks
 
 # Sentinel secret values: these must NEVER appear in doctor output.
 SECRET_API_KEY = "sk-ant-DOCTORSECRET12345"
