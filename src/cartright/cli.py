@@ -7,6 +7,10 @@ calls and never prints a secret value. Later go-live slices hang their own
 check subcommands off the same dispatcher.
 
 Run as `cartright <subcommand>` (console entry) or `python -m cartright <...>`.
+
+On startup the CLI loads a local `.env` (if present) so the operator can run
+checks against a populated `.env` instead of exporting every var by hand. Real
+environment variables (e.g. host secrets) always win - `.env` only fills gaps.
 """
 
 from __future__ import annotations
@@ -17,6 +21,8 @@ import sys
 from collections.abc import Sequence
 from datetime import date
 from typing import TextIO
+
+from dotenv import find_dotenv, load_dotenv
 
 from cartright.llm.alerts import AlertComposer
 from cartright.preflight import CheckResult, run_doctor_checks
@@ -248,3 +254,16 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser.print_usage()
     return 2
+
+
+def run(argv: Sequence[str] | None = None) -> int:
+    """Console / module entry point: load the project-dir `.env`, then dispatch.
+
+    Operators run `cartright <cmd>` from the project directory, so we load that
+    directory's `.env` (walking up to the repo root) before reading any var.
+    Host environment variables still win: `load_dotenv` does not override a var
+    that is already set, so Render secrets take precedence over a stray `.env`.
+    `main()` itself stays free of this I/O so it remains hermetically testable.
+    """
+    load_dotenv(find_dotenv(usecwd=True))
+    return main(argv)
