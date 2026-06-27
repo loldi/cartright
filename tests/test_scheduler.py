@@ -7,8 +7,8 @@ from cartright.scheduler import run_alert_cycle
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
 from cartright.shopping_engine.adapters.fixtures import (
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 from cartright.shopping_engine.engine import ReorderCandidate
 from cartright.shopping_engine.pricing import DealEvaluation
@@ -83,13 +83,13 @@ def test_out_of_window_candidate_is_never_deal_checked_or_alerted() -> None:
     )
     engine = make_engine(catalog)
     composer = _FakeComposer()
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
 
     run_alert_cycle(
         engine=engine,
         composer=composer,
-        twilio=twilio,
-        user_number="+15555550123",
+        messenger=messenger,
+        user_chat_id="987654321",
         review_base_url="https://example.test/review",
         today=TODAY,
     )
@@ -107,13 +107,13 @@ def test_in_window_deal_triggers_one_alert_linking_to_the_review_page() -> None:
     )
     engine = make_engine(catalog)
     composer = _FakeComposer(body="Paper towels are 18% off - check it out!")
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
 
     sent = run_alert_cycle(
         engine=engine,
         composer=composer,
-        twilio=twilio,
-        user_number="+15555550123",
+        messenger=messenger,
+        user_chat_id="987654321",
         review_base_url="https://example.test/review",
         today=TODAY,
     )
@@ -124,8 +124,8 @@ def test_in_window_deal_triggers_one_alert_linking_to_the_review_page() -> None:
     assert candidate.item_id == PAPER_TOWELS
     assert deal.is_deal is True
     assert review_url == f"https://example.test/review?item={PAPER_TOWELS}"
-    assert twilio.sent == [
-        {"to": "+15555550123", "body": "Paper towels are 18% off - check it out!"}
+    assert messenger.sent == [
+        {"to": "987654321", "body": "Paper towels are 18% off - check it out!"}
     ]
 
 
@@ -138,19 +138,19 @@ def test_no_alert_when_in_window_but_no_real_deal() -> None:
     )
     engine = make_engine(catalog)
     composer = _FakeComposer()
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
 
     sent = run_alert_cycle(
         engine=engine,
         composer=composer,
-        twilio=twilio,
-        user_number="+15555550123",
+        messenger=messenger,
+        user_chat_id="987654321",
         review_base_url="https://example.test/review",
         today=TODAY,
     )
 
     assert sent == []
     assert composer.calls == []
-    assert twilio.sent == []
+    assert messenger.sent == []
     # It WAS checked (it's in-window) - just turned out not to be a real deal.
     assert PAPER_TOWELS in catalog.queried

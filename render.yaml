@@ -1,8 +1,8 @@
 # Render Blueprint for Cartright. Deploy via the Render dashboard:
 # New > Blueprint > point at this repo. Secrets (sync: false) are set in the
-# dashboard, never committed. The single web service runs the SMS webhook, the
-# review page, and (with CARTRIGHT_RUN_SCHEDULER=1) the proactive alert loop in
-# a background thread - keeping the whole thing on one always-on instance.
+# dashboard, never committed. The single web service runs the Telegram webhook,
+# the review page, and (with CARTRIGHT_RUN_SCHEDULER=1) the proactive alert loop
+# in a background thread - keeping the whole thing on one always-on instance.
 services:
   - type: web
     name: cartright
@@ -14,12 +14,10 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: TWILIO_ACCOUNT_SID
+      - key: TELEGRAM_BOT_TOKEN
         sync: false
-      - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: TWILIO_FROM_NUMBER
-        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false # the SAME value passed as secret_token when you call setWebhook
       - key: WM_CONSUMER_ID
         sync: false
       - key: WM_KEY_VERSION
@@ -28,7 +26,7 @@ services:
         sync: false
       - key: WM_PUBLISHER_ID
         sync: false
-      - key: CARTRIGHT_USER_NUMBER
+      - key: CARTRIGHT_USER_CHAT_ID
         sync: false
       - key: CARTRIGHT_ORDER_HISTORY_PATH
         sync: false
@@ -36,7 +34,7 @@ services:
         value: /var/data/cartright.db
       - key: CARTRIGHT_REVIEW_BASE_URL
         sync: false
-      - key: CARTRIGHT_VALIDATE_TWILIO_SIGNATURE
+      - key: CARTRIGHT_VALIDATE_TELEGRAM_SECRET
         value: "1"
       - key: CARTRIGHT_REVIEW_TOKEN_SECRET
         sync: false # set the SAME value in your local .env so alert-once links resolve

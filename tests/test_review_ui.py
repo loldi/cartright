@@ -6,8 +6,8 @@ from cartright.review.render import render_review
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.fixtures import (
     FixtureCatalogPricingAdapter,
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 from cartright.shopping_engine.pricing import Cart, CartItem
 
@@ -96,8 +96,8 @@ def test_review_route_renders_a_real_built_cart() -> None:
         create_app(
             parser=_FakeParser(),
             engine=engine,
-            twilio=FixtureTwilioAdapter(),
-            user_number="+15555550123",
+            messenger=FixtureMessenger(),
+            user_chat_id="987654321",
         )
     )
 

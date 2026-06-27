@@ -3,8 +3,8 @@ import pytest
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.fixtures import (
     FixtureCatalogPricingAdapter,
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 
 
@@ -22,19 +22,9 @@ def test_schema_is_initialized_on_construction(engine: ShoppingEngine) -> None:
     assert any(row["name"] == "preferences" for row in tables)
 
 
-def test_fixture_twilio_adapter_records_sent_sms() -> None:
-    twilio = FixtureTwilioAdapter()
+def test_fixture_messenger_records_sent_messages() -> None:
+    messenger = FixtureMessenger()
 
-    twilio.send_sms(to="+15555550123", body="Bounty is on sale, want it?")
+    messenger.send_message(to="987654321", body="Bounty is on sale, want it?")
 
-    assert twilio.sent == [{"to": "+15555550123", "body": "Bounty is on sale, want it?"}]
-
-
-def test_fixture_twilio_adapter_queues_and_drains_inbound_sms() -> None:
-    twilio = FixtureTwilioAdapter()
-    twilio.queue_inbound(frm="+15555550123", body="always get Bounty")
-
-    received = twilio.receive_sms()
-
-    assert received == [{"from": "+15555550123", "body": "always get Bounty"}]
-    assert twilio.receive_sms() == []
+    assert messenger.sent == [{"to": "987654321", "body": "Bounty is on sale, want it?"}]

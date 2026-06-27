@@ -1,7 +1,7 @@
 """GL-7: the `cartright alert-once` command.
 
 Runs one alert cycle against injected fakes and reports what it sent vs skipped.
-No live Claude/Twilio call - a fake composer returns canned text.
+No live Claude/Telegram call - a fake composer returns canned text.
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ from cartright.review_links import build_review_url
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
 from cartright.shopping_engine.adapters.fixtures import (
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 from cartright.shopping_engine.engine import ReorderCandidate
 from cartright.shopping_engine.pricing import DealEvaluation
@@ -60,14 +60,14 @@ def test_alert_once_reports_sent_and_skipped() -> None:
             COFFEE: {"price": 5.00, "was_price": 7.00, "in_stock": True},
         }
     )
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
     out = io.StringIO()
 
     code = alert_once(
         engine,
         _FakeComposer(),
-        twilio,
-        user_number="+15555550123",
+        messenger,
+        user_chat_id="987654321",
         review_base_url="https://x.test/review",
         today=TODAY,
         out=out,
@@ -79,19 +79,19 @@ def test_alert_once_reports_sent_and_skipped() -> None:
     assert "1 skipped" in text
     assert f"[{PAPER_TOWELS}]" in text  # the in-window deal got sent
     assert "outside reorder window" in text  # coffee skipped
-    assert len(twilio.sent) == 1
+    assert len(messenger.sent) == 1
 
 
 def test_alert_once_sends_nothing_when_no_deal() -> None:
     engine = _engine({PAPER_TOWELS: {"price": 10.97, "in_stock": True}})  # full price, no deal
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
     out = io.StringIO()
 
     code = alert_once(
         engine,
         _FakeComposer(),
-        twilio,
-        user_number="+15555550123",
+        messenger,
+        user_chat_id="987654321",
         review_base_url="https://x.test/review",
         today=TODAY,
         out=out,
@@ -99,7 +99,7 @@ def test_alert_once_sends_nothing_when_no_deal() -> None:
 
     assert code == 0
     assert "0 sent" in out.getvalue()
-    assert twilio.sent == []
+    assert messenger.sent == []
 
 
 def test_build_review_url_is_plain_without_a_secret() -> None:

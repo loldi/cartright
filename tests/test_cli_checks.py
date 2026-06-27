@@ -1,10 +1,11 @@
-"""GL-2/3/4: the live-seam check subcommands (catalog / orders / sms).
+"""GL-2/3/4: the live-seam check subcommands (catalog / orders / message).
 
 Each command takes an injected adapter so tests exercise it with fakes - a
 walmart adapter backed by `httpx.MockTransport`, a real JSON-file order adapter
-over a temp file, and a fake Twilio client. No test touches a live endpoint or
-sends a real SMS. The error-output tests assert that secrets (the walmart
-signature, a Twilio Account SID) never appear in what the command prints.
+over a temp file, and a Telegram messenger over a mock transport. No test
+touches a live endpoint or sends a real message. The error-output tests assert
+that secrets (the walmart signature, the Telegram bot token) never appear in
+what the command prints.
 """
 
 from __future__ import annotations
@@ -17,10 +18,10 @@ from pathlib import Path
 import httpx
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cartright.cli import catalog_check, orders_check, sms_check
-from cartright.shopping_engine.adapters.base import TwilioAdapter
+from cartright.cli import catalog_check, message_check, orders_check
+from cartright.shopping_engine.adapters.base import Messenger
 from cartright.shopping_engine.adapters.order_history import JsonFileOrderHistoryAdapter
-from cartright.shopping_engine.adapters.twilio_sms import TwilioSmsAdapter
+from cartright.shopping_engine.adapters.telegram import TelegramMessenger
 from cartright.shopping_engine.adapters.walmart import (
     WalmartCatalogPricingAdapter,
     WalmartCredentials,
@@ -144,58 +145,51 @@ def test_orders_check_handles_empty_file(tmp_path: Path) -> None:
     assert "no orders" in out.getvalue().lower()
 
 
-# ---- sms-check ------------------------------------------------------------
+# ---- message-check --------------------------------------------------------
 
 
-class _FakeMessages:
-    def __init__(self) -> None:
-        self.created: list[dict[str, str]] = []
+def test_message_check_sends_one_message() -> None:
+    sent: list[dict[str, object]] = []
 
-    def create(self, *, to: str, from_: str, body: str) -> None:
-        self.created.append({"to": to, "from_": from_, "body": body})
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True})
 
-
-class _FakeClient:
-    def __init__(self) -> None:
-        self.messages = _FakeMessages()
-
-
-def test_sms_check_sends_one_message() -> None:
-    client = _FakeClient()
-    adapter = TwilioSmsAdapter(client, from_number="+15550001111")
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter = TelegramMessenger(
+        "123:TESTTOKEN", client=client, api_base="https://api.telegram.test"
+    )
     out = io.StringIO()
 
-    code = sms_check(adapter, "+15555550123", out=out)
+    code = message_check(adapter, "987654321", out=out)
 
     assert code == 0
-    assert len(client.messages.created) == 1
-    assert client.messages.created[0]["to"] == "+15555550123"
+    assert len(sent) == 1
+    assert sent[0]["chat_id"] == "987654321"
 
 
-class _BoomTwilio(TwilioAdapter):
-    """A Twilio adapter whose send raises an error carrying a secret SID."""
+class _BoomMessenger(Messenger):
+    """A messenger whose send raises an error carrying the token-bearing URL."""
 
-    def send_sms(self, to: str, body: str) -> None:
-        raise _FakeTwilioError()
-
-    def receive_sms(self) -> list[dict[str, object]]:
-        return []
+    def send_message(self, to: str, body: str) -> None:
+        raise _FakeHttpError()
 
 
-class _FakeTwilioError(Exception):
+class _FakeHttpError(Exception):
     status = 401
-    uri = "https://api.twilio.com/2010-04-01/Accounts/ACsecretsid12345/Messages.json"
+    # httpx errors carry the request URL, which embeds the bot token.
+    uri = "https://api.telegram.org/bot123456:SECRETTOKEN/sendMessage"
 
     def __str__(self) -> str:
         return f"HTTP 401 error: {self.uri}"
 
 
-def test_sms_check_error_output_never_leaks_account_sid() -> None:
+def test_message_check_error_output_never_leaks_the_token() -> None:
     out = io.StringIO()
-    code = sms_check(_BoomTwilio(), "+15555550123", out=out)
+    code = message_check(_BoomMessenger(), "987654321", out=out)
 
     text = out.getvalue()
     assert code == 1
-    assert "ACsecretsid12345" not in text
-    assert "api.twilio.com" not in text
+    assert "SECRETTOKEN" not in text
+    assert "api.telegram.org" not in text
     assert "401" in text  # status is fine to show

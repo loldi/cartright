@@ -7,7 +7,7 @@ from datetime import date
 from cartright.llm.alerts import AlertComposer
 from cartright.review_links import build_review_url
 from cartright.shopping_engine import ShoppingEngine
-from cartright.shopping_engine.adapters.base import TwilioAdapter
+from cartright.shopping_engine.adapters.base import Messenger
 from cartright.shopping_engine.engine import ReorderCandidate
 
 
@@ -19,7 +19,7 @@ class AlertOutcome:
     title: str
     sent: bool
     reason: str
-    body: str | None  # the SMS body, when one was sent
+    body: str | None  # the message body, when one was sent
 
 
 def _in_window(candidate: ReorderCandidate, today: date) -> bool:
@@ -32,8 +32,8 @@ def run_alert_cycle_detailed(
     *,
     engine: ShoppingEngine,
     composer: AlertComposer,
-    twilio: TwilioAdapter,
-    user_number: str,
+    messenger: Messenger,
+    user_chat_id: str,
     review_base_url: str,
     review_token_secret: str | None = None,
     today: date | None = None,
@@ -41,7 +41,7 @@ def run_alert_cycle_detailed(
     """Run one pass of the proactive loop, returning a per-candidate report.
 
     For every reorder candidate inside its predicted window, checks for a real
-    deal and only then sends an SMS alert linking to that item's review page.
+    deal and only then sends a message alert linking to that item's review page.
     Candidates outside their window are never even deal-checked - the resulting
     silence is the personalization, not a side effect of it.
     """
@@ -71,7 +71,7 @@ def run_alert_cycle_detailed(
             review_base_url, candidate.item_id, secret=review_token_secret
         )
         body = composer.compose(candidate, deal, review_url)
-        twilio.send_sms(to=user_number, body=body)
+        messenger.send_message(to=user_chat_id, body=body)
         outcomes.append(
             AlertOutcome(
                 candidate.item_id, candidate.title, True, f"deal: ${deal.savings:.2f} off", body
@@ -84,13 +84,13 @@ def run_alert_cycle(
     *,
     engine: ShoppingEngine,
     composer: AlertComposer,
-    twilio: TwilioAdapter,
-    user_number: str,
+    messenger: Messenger,
+    user_chat_id: str,
     review_base_url: str,
     review_token_secret: str | None = None,
     today: date | None = None,
 ) -> list[str]:
-    """Run one cycle and return just the bodies of any SMS sent.
+    """Run one cycle and return just the bodies of any message sent.
 
     A thin wrapper over `run_alert_cycle_detailed` for the production loop and
     existing callers; the detailed variant carries the skip reasons that the
@@ -101,8 +101,8 @@ def run_alert_cycle(
         for o in run_alert_cycle_detailed(
             engine=engine,
             composer=composer,
-            twilio=twilio,
-            user_number=user_number,
+            messenger=messenger,
+            user_chat_id=user_chat_id,
             review_base_url=review_base_url,
             review_token_secret=review_token_secret,
             today=today,
@@ -115,8 +115,8 @@ def run_forever(
     *,
     engine: ShoppingEngine,
     composer: AlertComposer,
-    twilio: TwilioAdapter,
-    user_number: str,
+    messenger: Messenger,
+    user_chat_id: str,
     review_base_url: str,
     review_token_secret: str | None = None,
     interval_seconds: int = 3600,
@@ -126,8 +126,8 @@ def run_forever(
         run_alert_cycle(
             engine=engine,
             composer=composer,
-            twilio=twilio,
-            user_number=user_number,
+            messenger=messenger,
+            user_chat_id=user_chat_id,
             review_base_url=review_base_url,
             review_token_secret=review_token_secret,
         )

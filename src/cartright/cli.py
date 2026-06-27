@@ -30,17 +30,17 @@ from cartright.scheduler import run_alert_cycle_detailed
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import (
     CatalogPricingAdapter,
+    Messenger,
     OrderHistoryAdapter,
-    TwilioAdapter,
 )
 from cartright.shopping_engine.adapters.fixtures import FixtureCatalogPricingAdapter
 from cartright.shopping_engine.adapters.order_history import JsonFileOrderHistoryAdapter
-from cartright.shopping_engine.adapters.twilio_sms import TwilioSmsAdapter
+from cartright.shopping_engine.adapters.telegram import TelegramMessenger
 from cartright.shopping_engine.adapters.walmart import WalmartCatalogPricingAdapter
 
 # Vars whose value is sensitive: the report confirms presence/validity only and
 # must never echo the value itself.
-_SECRET = {"ANTHROPIC_API_KEY", "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "WM_CONSUMER_ID"}
+_SECRET = {"ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN", "WM_CONSUMER_ID"}
 
 
 def format_report(results: Sequence[CheckResult]) -> str:
@@ -77,9 +77,9 @@ def _sanitized_error(label: str, exc: Exception) -> str:
     """A one-line, secret-free description of a failed live call.
 
     Deliberately uses only the exception class name and (if present) an HTTP
-    status code - never `str(exc)`, which for httpx carries the request URL and
-    for a Twilio error embeds the Account SID. Headers (the walmart signature,
-    Twilio basic auth) are never touched.
+    status code - never `str(exc)`, which for httpx carries the request URL
+    (the Telegram bot token lives in that URL). Headers (the walmart signature)
+    are never touched.
     """
     detail = type(exc).__name__
     status = getattr(getattr(exc, "response", None), "status_code", None)
@@ -158,24 +158,24 @@ def orders_check(adapter: OrderHistoryAdapter, out: TextIO = sys.stdout) -> int:
     return 0
 
 
-def sms_check(twilio: TwilioAdapter, to: str, out: TextIO = sys.stdout) -> int:
-    """GL-4: send one real test SMS to confirm the Twilio wiring works."""
-    body = "Cartright test message - if you got this, your SMS wiring works."
+def message_check(messenger: Messenger, to: str, out: TextIO = sys.stdout) -> int:
+    """GL-4: send one real test message to confirm the Telegram wiring works."""
+    body = "Cartright test message - if you got this, your messaging wiring works."
     try:
-        twilio.send_sms(to=to, body=body)
+        messenger.send_message(to=to, body=body)
     except Exception as exc:  # noqa: BLE001 - report any live failure, never crash
-        print(_sanitized_error("SMS send failed", exc), file=out)
+        print(_sanitized_error("Message send failed", exc), file=out)
         return 1
-    print(f"Sent test SMS to {to}.", file=out)
+    print(f"Sent test message to chat {to}.", file=out)
     return 0
 
 
 def alert_once(
     engine: ShoppingEngine,
     composer: AlertComposer,
-    twilio: TwilioAdapter,
+    messenger: Messenger,
     *,
-    user_number: str,
+    user_chat_id: str,
     review_base_url: str,
     review_token_secret: str | None = None,
     today: date | None = None,
@@ -189,8 +189,8 @@ def alert_once(
     outcomes = run_alert_cycle_detailed(
         engine=engine,
         composer=composer,
-        twilio=twilio,
-        user_number=user_number,
+        messenger=messenger,
+        user_chat_id=user_chat_id,
         review_base_url=review_base_url,
         review_token_secret=review_token_secret,
         today=today,
@@ -211,8 +211,9 @@ def _orders_check_cmd() -> int:  # pragma: no cover - thin from_env wiring
     return orders_check(JsonFileOrderHistoryAdapter.from_env())
 
 
-def _sms_check_cmd(to: str) -> int:  # pragma: no cover - thin from_env wiring
-    return sms_check(TwilioSmsAdapter.from_env(), to)
+def _message_check_cmd(to: str | None) -> int:  # pragma: no cover - thin from_env wiring
+    chat_id = to or os.environ["CARTRIGHT_USER_CHAT_ID"]
+    return message_check(TelegramMessenger.from_env(), chat_id)
 
 
 def _alert_once_cmd() -> int:  # pragma: no cover - thin from_env wiring
@@ -222,8 +223,8 @@ def _alert_once_cmd() -> int:  # pragma: no cover - thin from_env wiring
     return alert_once(
         build_engine(),
         ClaudeAlertComposer(),
-        TwilioSmsAdapter.from_env(),
-        user_number=os.environ["CARTRIGHT_USER_NUMBER"],
+        TelegramMessenger.from_env(),
+        user_chat_id=os.environ["CARTRIGHT_USER_CHAT_ID"],
         review_base_url=os.environ["CARTRIGHT_REVIEW_BASE_URL"],
         review_token_secret=os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
     )
@@ -236,8 +237,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     cat = sub.add_parser("catalog-check", help="Live walmart.io price lookup for one item.")
     cat.add_argument("item_id", help="Walmart catalog item id to look up.")
     sub.add_parser("orders-check", help="Validate the order-history file and show candidates.")
-    sms = sub.add_parser("sms-check", help="Send one real test SMS via Twilio.")
-    sms.add_argument("to", help="Destination phone number (E.164, e.g. +15555550123).")
+    msg = sub.add_parser("message-check", help="Send one real test message via Telegram.")
+    msg.add_argument(
+        "to",
+        nargs="?",
+        default=None,
+        help="Destination Telegram chat id (defaults to CARTRIGHT_USER_CHAT_ID).",
+    )
     sub.add_parser("alert-once", help="Run one proactive alert cycle now and report it.")
 
     args = parser.parse_args(argv)
@@ -247,8 +253,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _catalog_check_cmd(args.item_id)
     if args.command == "orders-check":
         return _orders_check_cmd()
-    if args.command == "sms-check":
-        return _sms_check_cmd(args.to)
+    if args.command == "message-check":
+        return _message_check_cmd(args.to)
     if args.command == "alert-once":
         return _alert_once_cmd()
 

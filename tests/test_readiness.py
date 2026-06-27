@@ -20,8 +20,8 @@ from cartright.preflight import readiness
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.fixtures import (
     FixtureCatalogPricingAdapter,
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 
 SECRET_API_KEY = "sk-ant-READINESSSECRET999"
@@ -39,12 +39,10 @@ def _pem_key() -> str:
 def _full_env(orders_path: str) -> dict[str, str]:
     return {
         "ANTHROPIC_API_KEY": SECRET_API_KEY,
-        "TWILIO_ACCOUNT_SID": "ACxxxx",
-        "TWILIO_AUTH_TOKEN": "tok",
-        "TWILIO_FROM_NUMBER": "+15550001111",
+        "TELEGRAM_BOT_TOKEN": "123456789:AAFAKEtokenFAKEtokenFAKEtoken00",
         "WM_CONSUMER_ID": "11111111-2222-3333-4444-555555555555",
         "WM_PRIVATE_KEY": _pem_key(),
-        "CARTRIGHT_USER_NUMBER": "+15555550123",
+        "CARTRIGHT_USER_CHAT_ID": "987654321",
         "CARTRIGHT_ORDER_HISTORY_PATH": orders_path,
         "CARTRIGHT_REVIEW_BASE_URL": "https://x.example.com/review",
     }
@@ -61,7 +59,7 @@ def test_full_env_reports_every_subsystem_configured(tmp_path: Path) -> None:
 
     assert report == {
         "anthropic_configured": True,
-        "twilio_configured": True,
+        "telegram_configured": True,
         "walmart_configured": True,
         "order_history_present": True,
         "scheduler_enabled": False,  # CARTRIGHT_RUN_SCHEDULER unset
@@ -86,11 +84,11 @@ def test_malformed_key_makes_walmart_not_configured(tmp_path: Path) -> None:
     assert readiness(env)["walmart_configured"] is False
 
 
-def test_partial_twilio_is_not_configured(tmp_path: Path) -> None:
+def test_missing_telegram_token_is_not_configured(tmp_path: Path) -> None:
     env = _full_env(_orders_file(tmp_path))
-    del env["TWILIO_AUTH_TOKEN"]
+    del env["TELEGRAM_BOT_TOKEN"]
 
-    assert readiness(env)["twilio_configured"] is False
+    assert readiness(env)["telegram_configured"] is False
 
 
 def test_missing_order_file_is_not_present(tmp_path: Path) -> None:
@@ -112,8 +110,8 @@ def _make_app() -> TestClient:
     app = create_app(
         parser=_Parser(),
         engine=engine,
-        twilio=FixtureTwilioAdapter(),
-        user_number="+15555550123",
+        messenger=FixtureMessenger(),
+        user_chat_id="987654321",
     )
     return TestClient(app)
 

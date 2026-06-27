@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import hmac
 import os
-from collections.abc import Mapping
 
 from fastapi import FastAPI, Request, Response
 
@@ -10,60 +10,44 @@ from cartright.llm.preferences import PreferenceParser
 from cartright.preflight import readiness
 from cartright.review.web import review_router
 from cartright.shopping_engine import ShoppingEngine
-from cartright.shopping_engine.adapters.base import TwilioAdapter
+from cartright.shopping_engine.adapters.base import Messenger
 
-_EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
+_SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
 
 
-def _public_url(request: Request) -> str:
-    """Reconstruct the URL Twilio signed, honoring proxy headers.
+def _webhook_secret_ok(expected: str | None, request: Request) -> bool:
+    """Validate the Telegram webhook secret token. Fail-closed.
 
-    Behind a host like Render the internal scheme/host differ from the public
-    https URL Twilio actually POSTed to, and the signature is computed over that
-    public URL - so prefer the forwarded headers when present.
+    Telegram echoes the `secret_token` configured via `setWebhook` in the
+    `X-Telegram-Bot-Api-Secret-Token` header on every update. No configured
+    secret, or a missing/wrong header, means reject - a constant-time compare
+    so the check leaks no timing signal.
     """
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = (
-        request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
-    )
-    url = f"{proto}://{host}{request.url.path}"
-    return f"{url}?{request.url.query}" if request.url.query else url
-
-
-def _twilio_signature_ok(
-    auth_token: str | None, request: Request, form: Mapping[str, object]
-) -> bool:
-    """Validate X-Twilio-Signature. Fail-closed: no token or no signature -> False."""
-    signature = request.headers.get("X-Twilio-Signature", "")
-    if not auth_token or not signature:
+    got = request.headers.get(_SECRET_HEADER, "")
+    if not expected or not got:
         return False
-    from twilio.request_validator import RequestValidator  # type: ignore[import-untyped]
-
-    params = {key: str(value) for key, value in form.items()}
-    validator = RequestValidator(auth_token)
-    return bool(validator.validate(_public_url(request), params, signature))
+    return hmac.compare_digest(got, expected)
 
 
 def create_app(
     *,
     parser: PreferenceParser,
     engine: ShoppingEngine,
-    twilio: TwilioAdapter,
-    user_number: str,
-    twilio_auth_token: str | None = None,
-    validate_twilio_signature: bool = True,
+    messenger: Messenger,
+    user_chat_id: str,
+    webhook_secret: str | None = None,
+    validate_webhook: bool = True,
     review_token_secret: str | None = None,
 ) -> FastAPI:
     """Build the Cartright web app wired to the given dependencies.
 
     Production passes real adapters; tests pass fakes satisfying the same
-    interfaces. `user_number` is the single private number this instance serves
-    - inbound SMS from anyone else is ignored.
+    interfaces. `user_chat_id` is the single private Telegram chat this instance
+    serves - an update from any other chat is ignored.
 
-    `validate_twilio_signature` defaults to on (fail-closed): inbound `/sms`
-    requests must carry a valid `X-Twilio-Signature` computed with
-    `twilio_auth_token`, or they are rejected with 403. Local/test callers can
-    pass `validate_twilio_signature=False` to bypass it.
+    `validate_webhook` defaults to on (fail-closed): inbound `/telegram` updates
+    must carry the matching `X-Telegram-Bot-Api-Secret-Token`, or they are
+    rejected with 403. Local/test callers can pass `validate_webhook=False`.
     """
     app = FastAPI(title="Cartright")
 
@@ -74,16 +58,20 @@ def create_app(
         echoes a secret value and never makes a live call."""
         return {"status": "ok", **readiness(os.environ)}
 
-    @app.post("/sms")
-    async def inbound_sms(request: Request) -> Response:
-        form = await request.form()
-        if validate_twilio_signature and not _twilio_signature_ok(twilio_auth_token, request, form):
-            return Response(status_code=403, content="invalid Twilio signature")
-        sender = str(form.get("From", ""))
-        body = str(form.get("Body", ""))
-        if sender == user_number:
-            handle_inbound_preference(body, to=sender, parser=parser, engine=engine, twilio=twilio)
-        return Response(content=_EMPTY_TWIML, media_type="application/xml")
+    @app.post("/telegram")
+    async def inbound_telegram(request: Request) -> Response:
+        if validate_webhook and not _webhook_secret_ok(webhook_secret, request):
+            return Response(status_code=403, content="invalid webhook secret")
+        update = await request.json()
+        message = update.get("message") or {}
+        chat_id = str((message.get("chat") or {}).get("id", ""))
+        text = str(message.get("text", ""))
+        # Only the one private chat this instance serves; ignore everything else.
+        if chat_id and chat_id == user_chat_id and text:
+            handle_inbound_preference(
+                text, to=chat_id, parser=parser, engine=engine, messenger=messenger
+            )
+        return Response(status_code=200)
 
     # The review-order UI is a separate surface; compose its routes in here.
     app.include_router(review_router(engine, token_secret=review_token_secret))
