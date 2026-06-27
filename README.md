@@ -111,6 +111,8 @@ container host works the same way.
 
 ### Going live (manual, one-time)
 
+See [`GO-LIVE.md`](GO-LIVE.md) for the full ordered runbook. In short:
+
 1. **Preflight:** with your `.env` filled in, run `cartright doctor` (or
    `python -m cartright doctor`). It validates every required var (presence,
    key parses, phone numbers are E.164, order-history file exists, review URL is
@@ -134,8 +136,9 @@ container host works the same way.
    (`CARTRIGHT_VALIDATE_TWILIO_SIGNATURE`).
 5. Set `CARTRIGHT_REVIEW_BASE_URL` to `https://<your-host>/review`.
 6. Verify end-to-end: text a preference to the Twilio number and confirm a
-   live-Claude confirmation SMS comes back, and/or let an in-window deal fire a
-   proactive alert with a working review link.
+   live-Claude confirmation SMS comes back; and run `cartright alert-once` to
+   fire one proactive alert on demand (instead of waiting for the hourly tick)
+   and confirm it arrives with a working review link.
 
 ### Secure operations
 
