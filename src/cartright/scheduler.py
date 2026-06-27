@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from datetime import date
 
 from cartright.llm.alerts import AlertComposer
@@ -9,10 +10,84 @@ from cartright.shopping_engine.adapters.base import TwilioAdapter
 from cartright.shopping_engine.engine import ReorderCandidate
 
 
+@dataclass(frozen=True)
+class AlertOutcome:
+    """What the cycle decided for one reorder candidate, for reporting."""
+
+    item_id: str
+    title: str
+    sent: bool
+    reason: str
+    body: str | None  # the SMS body, when one was sent
+
+
 def _in_window(candidate: ReorderCandidate, today: date) -> bool:
     start = date.fromisoformat(candidate.window_start)
     end = date.fromisoformat(candidate.window_end)
     return start <= today <= end
+
+
+def build_review_url(review_base_url: str, item_id: str, token: str | None = None) -> str:
+    """Construct an alert's review-page link from its base URL.
+
+    Centralized so the link contract has a single home: hardening ticket #27
+    will add a signed, expiring `token` to these links, and `/review` will
+    verify it. The `token` param is the seam for that - left unused here on
+    purpose (no signing in this slice), so the format stays `?item=<id>` today.
+    """
+    url = f"{review_base_url}?item={item_id}"
+    if token is not None:
+        url += f"&token={token}"
+    return url
+
+
+def run_alert_cycle_detailed(
+    *,
+    engine: ShoppingEngine,
+    composer: AlertComposer,
+    twilio: TwilioAdapter,
+    user_number: str,
+    review_base_url: str,
+    today: date | None = None,
+) -> list[AlertOutcome]:
+    """Run one pass of the proactive loop, returning a per-candidate report.
+
+    For every reorder candidate inside its predicted window, checks for a real
+    deal and only then sends an SMS alert linking to that item's review page.
+    Candidates outside their window are never even deal-checked - the resulting
+    silence is the personalization, not a side effect of it.
+    """
+    today = today or date.today()
+    outcomes: list[AlertOutcome] = []
+    for candidate in engine.getReorderCandidates():
+        if not _in_window(candidate, today):
+            outcomes.append(
+                AlertOutcome(
+                    candidate.item_id,
+                    candidate.title,
+                    False,
+                    f"outside reorder window ({candidate.window_start}..{candidate.window_end})",
+                    None,
+                )
+            )
+            continue
+        deal = engine.evaluateDeal(candidate.item_id)
+        if not deal.is_deal:
+            outcomes.append(
+                AlertOutcome(
+                    candidate.item_id, candidate.title, False, "in window, but no real deal", None
+                )
+            )
+            continue
+        review_url = build_review_url(review_base_url, candidate.item_id)
+        body = composer.compose(candidate, deal, review_url)
+        twilio.send_sms(to=user_number, body=body)
+        outcomes.append(
+            AlertOutcome(
+                candidate.item_id, candidate.title, True, f"deal: ${deal.savings:.2f} off", body
+            )
+        )
+    return outcomes
 
 
 def run_alert_cycle(
@@ -24,27 +99,24 @@ def run_alert_cycle(
     review_base_url: str,
     today: date | None = None,
 ) -> list[str]:
-    """Run one pass of the proactive personalization loop.
+    """Run one cycle and return just the bodies of any SMS sent.
 
-    For every reorder candidate currently inside its predicted window, checks
-    for a real deal and only then sends an SMS alert linking to that item's
-    review page. Candidates outside their window are never even deal-checked
-    - the resulting silence is the personalization, not a side effect of it.
-    Returns the bodies of any SMS sent, for tests/observability.
+    A thin wrapper over `run_alert_cycle_detailed` for the production loop and
+    existing callers; the detailed variant carries the skip reasons that the
+    `cartright alert-once` command surfaces.
     """
-    today = today or date.today()
-    sent: list[str] = []
-    for candidate in engine.getReorderCandidates():
-        if not _in_window(candidate, today):
-            continue
-        deal = engine.evaluateDeal(candidate.item_id)
-        if not deal.is_deal:
-            continue
-        review_url = f"{review_base_url}?item={candidate.item_id}"
-        body = composer.compose(candidate, deal, review_url)
-        twilio.send_sms(to=user_number, body=body)
-        sent.append(body)
-    return sent
+    return [
+        o.body
+        for o in run_alert_cycle_detailed(
+            engine=engine,
+            composer=composer,
+            twilio=twilio,
+            user_number=user_number,
+            review_base_url=review_base_url,
+            today=today,
+        )
+        if o.sent and o.body is not None
+    ]
 
 
 def run_forever(

@@ -18,7 +18,9 @@ from collections.abc import Sequence
 from datetime import date
 from typing import TextIO
 
+from cartright.llm.alerts import AlertComposer
 from cartright.preflight import CheckResult, run_doctor_checks
+from cartright.scheduler import run_alert_cycle_detailed
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import (
     CatalogPricingAdapter,
@@ -162,6 +164,37 @@ def sms_check(twilio: TwilioAdapter, to: str, out: TextIO = sys.stdout) -> int:
     return 0
 
 
+def alert_once(
+    engine: ShoppingEngine,
+    composer: AlertComposer,
+    twilio: TwilioAdapter,
+    *,
+    user_number: str,
+    review_base_url: str,
+    today: date | None = None,
+    out: TextIO = sys.stdout,
+) -> int:
+    """GL-7: run a single alert cycle now and report what it sent vs skipped.
+
+    Drives verification and the demo recording without waiting for the hourly
+    scheduler tick (PRD: only the timing is staged, the content stays live).
+    """
+    outcomes = run_alert_cycle_detailed(
+        engine=engine,
+        composer=composer,
+        twilio=twilio,
+        user_number=user_number,
+        review_base_url=review_base_url,
+        today=today,
+    )
+    sent = [o for o in outcomes if o.sent]
+    print(f"Ran one alert cycle: {len(sent)} sent, {len(outcomes) - len(sent)} skipped.", file=out)
+    for o in outcomes:
+        mark = "SENT" if o.sent else "skip"
+        print(f"  [{mark}] [{o.item_id}] {o.title}: {o.reason}", file=out)
+    return 0
+
+
 def _catalog_check_cmd(item_id: str) -> int:  # pragma: no cover - thin from_env wiring
     return catalog_check(WalmartCatalogPricingAdapter.from_env(), item_id)
 
@@ -174,6 +207,19 @@ def _sms_check_cmd(to: str) -> int:  # pragma: no cover - thin from_env wiring
     return sms_check(TwilioSmsAdapter.from_env(), to)
 
 
+def _alert_once_cmd() -> int:  # pragma: no cover - thin from_env wiring
+    from cartright.llm.claude import ClaudeAlertComposer
+    from cartright.main import build_engine
+
+    return alert_once(
+        build_engine(),
+        ClaudeAlertComposer(),
+        TwilioSmsAdapter.from_env(),
+        user_number=os.environ["CARTRIGHT_USER_NUMBER"],
+        review_base_url=os.environ["CARTRIGHT_REVIEW_BASE_URL"],
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="cartright", description="Cartright operator CLI.")
     sub = parser.add_subparsers(dest="command")
@@ -183,6 +229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     sub.add_parser("orders-check", help="Validate the order-history file and show candidates.")
     sms = sub.add_parser("sms-check", help="Send one real test SMS via Twilio.")
     sms.add_argument("to", help="Destination phone number (E.164, e.g. +15555550123).")
+    sub.add_parser("alert-once", help="Run one proactive alert cycle now and report it.")
 
     args = parser.parse_args(argv)
     if args.command == "doctor":
@@ -193,6 +240,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _orders_check_cmd()
     if args.command == "sms-check":
         return _sms_check_cmd(args.to)
+    if args.command == "alert-once":
+        return _alert_once_cmd()
 
     parser.print_usage()
     return 2
