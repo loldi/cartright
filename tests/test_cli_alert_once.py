@@ -11,7 +11,7 @@ from datetime import date
 from typing import Any
 
 from cartright.cli import alert_once
-from cartright.scheduler import build_review_url
+from cartright.review_links import build_review_url
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
 from cartright.shopping_engine.adapters.fixtures import (
@@ -102,10 +102,13 @@ def test_alert_once_sends_nothing_when_no_deal() -> None:
     assert twilio.sent == []
 
 
-def test_build_review_url_is_token_ready() -> None:
+def test_build_review_url_is_plain_without_a_secret() -> None:
     assert build_review_url("https://x.test/review", "abc") == "https://x.test/review?item=abc"
-    # The token seam exists for hardening #27, unused by default today.
-    assert (
-        build_review_url("https://x.test/review", "abc", token="sig")
-        == "https://x.test/review?item=abc&token=sig"
-    )
+
+
+def test_build_review_url_signs_when_a_secret_is_given() -> None:
+    url = build_review_url("https://x.test/review", "abc", secret="s3cr3t", now=1000)
+
+    # Signed links carry the item, an expiry, and an HMAC token.
+    assert url.startswith("https://x.test/review?item=abc&exp=")
+    assert "token=" in url
