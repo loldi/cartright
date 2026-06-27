@@ -50,6 +50,7 @@ set these as host secrets):
 | `CARTRIGHT_ORDER_HISTORY_PATH` | order history | path to the structured order-history JSON |
 | `CARTRIGHT_DB_PATH` | engine | file-backed SQLite path (default `cartright.db`) |
 | `CARTRIGHT_REVIEW_BASE_URL` | scheduler | public base URL of `/review`, used in alert links |
+| `CARTRIGHT_VALIDATE_TWILIO_SIGNATURE` | app | validate `X-Twilio-Signature` on `/sms`; default on, set `0` to disable |
 | `CARTRIGHT_RUN_SCHEDULER` | app | `1` to run the alert loop in-process |
 | `CARTRIGHT_SCHEDULER_INTERVAL_SECONDS` | scheduler | alert-loop interval (default `3600`) |
 
@@ -127,7 +128,10 @@ container host works the same way.
    `true` (it's a secret-free readiness report, booleans only), and that
    `https://<your-host>/review?item=<id>` renders for a known item.
 4. In the Twilio console, point the SMS number's **inbound webhook** at
-   `https://<your-host>/sms` (HTTP POST).
+   `https://<your-host>/sms` (HTTP POST). The endpoint validates the
+   `X-Twilio-Signature` on every request (fail-closed), so spoofed POSTs are
+   rejected with `403`; this is on by default
+   (`CARTRIGHT_VALIDATE_TWILIO_SIGNATURE`).
 5. Set `CARTRIGHT_REVIEW_BASE_URL` to `https://<your-host>/review`.
 6. Verify end-to-end: text a preference to the Twilio number and confirm a
    live-Claude confirmation SMS comes back, and/or let an in-window deal fire a

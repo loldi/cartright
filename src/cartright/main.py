@@ -75,6 +75,9 @@ def build_app() -> FastAPI:  # pragma: no cover - production wiring
         engine=engine,
         twilio=twilio,
         user_number=user_number,
+        twilio_auth_token=os.environ["TWILIO_AUTH_TOKEN"],
+        # Fail-closed by default; only an explicit "0" disables signature checks.
+        validate_twilio_signature=os.environ.get("CARTRIGHT_VALIDATE_TWILIO_SIGNATURE", "1") != "0",
     )
 
     if os.environ.get("CARTRIGHT_RUN_SCHEDULER") == "1":
