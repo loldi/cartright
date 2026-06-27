@@ -115,11 +115,18 @@ container host works the same way.
    key parses, phone numbers are E.164, order-history file exists, review URL is
    https) without any network call and without printing a secret. Fix anything
    it flags before deploying.
-2. Deploy the service and set all secrets from the table above.
-3. In the Twilio console, point the SMS number's **inbound webhook** at
+2. **Verify each live seam** (one real call each, run locally with your `.env`):
+   - `cartright catalog-check <itemId>` — confirms your walmart.io credentials +
+     request signing work; prints a real price.
+   - `cartright orders-check` — validates your real order-history file and prints
+     the reorder candidates inferred from it.
+   - `cartright sms-check <your-number>` — sends one real test SMS; confirm it
+     arrives.
+3. Deploy the service and set all secrets from the table above.
+4. In the Twilio console, point the SMS number's **inbound webhook** at
    `https://<your-host>/sms` (HTTP POST).
-4. Set `CARTRIGHT_REVIEW_BASE_URL` to `https://<your-host>/review`.
-5. Verify end-to-end: text a preference to the Twilio number and confirm a
+5. Set `CARTRIGHT_REVIEW_BASE_URL` to `https://<your-host>/review`.
+6. Verify end-to-end: text a preference to the Twilio number and confirm a
    live-Claude confirmation SMS comes back, and/or let an in-window deal fire a
    proactive alert with a working review link.
 
