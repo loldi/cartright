@@ -68,7 +68,15 @@ def test_sms_webhook_captures_preference_end_to_end() -> None:
             confirmation="Noted - Peet's coffee from now on.",
         )
     )
-    client = TestClient(create_app(parser=parser, engine=engine, twilio=twilio, user_number=USER))
+    client = TestClient(
+        create_app(
+            parser=parser,
+            engine=engine,
+            twilio=twilio,
+            user_number=USER,
+            validate_twilio_signature=False,
+        )
+    )
 
     response = client.post("/sms", data={"From": USER, "Body": "I only drink Peet's"})
 
@@ -82,7 +90,15 @@ def test_sms_webhook_ignores_messages_from_other_numbers() -> None:
     engine = make_engine()
     twilio = FixtureTwilioAdapter()
     parser = FakeParser(ParsedPreference(item_id="coffee", attributes={}, confirmation="ok"))
-    client = TestClient(create_app(parser=parser, engine=engine, twilio=twilio, user_number=USER))
+    client = TestClient(
+        create_app(
+            parser=parser,
+            engine=engine,
+            twilio=twilio,
+            user_number=USER,
+            validate_twilio_signature=False,
+        )
+    )
 
     response = client.post("/sms", data={"From": "+19998887777", "Body": "I only drink Peet's"})
 
