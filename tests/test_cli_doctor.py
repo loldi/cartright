@@ -17,7 +17,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cartright.cli import main
+from cartright.cli import main, run
 from cartright.preflight import CheckResult, run_doctor_checks
 
 # Sentinel secret values: these must NEVER appear in doctor output.
@@ -159,6 +159,32 @@ def test_main_doctor_returns_nonzero_when_misconfigured(monkeypatch: pytest.Monk
 
 def test_main_without_subcommand_is_a_usage_error() -> None:
     assert main([]) == 2
+
+
+def test_run_loads_missing_var_from_local_dotenv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`run` fills a var that is absent from the environment from the cwd .env."""
+    monkeypatch.delenv("CARTRIGHT_USER_NUMBER", raising=False)
+    (tmp_path / ".env").write_text("CARTRIGHT_USER_NUMBER=+15555550199\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    run(["doctor"])  # return code irrelevant; we assert the load side effect
+
+    assert os.environ["CARTRIGHT_USER_NUMBER"] == "+15555550199"
+
+
+def test_run_does_not_override_a_set_env_var(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real environment variable (e.g. a host secret) wins over the .env."""
+    monkeypatch.setenv("CARTRIGHT_USER_NUMBER", "+15550000001")
+    (tmp_path / ".env").write_text("CARTRIGHT_USER_NUMBER=+19999999999\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    run(["doctor"])
+
+    assert os.environ["CARTRIGHT_USER_NUMBER"] == "+15550000001"
 
 
 def test_module_entry_runs_doctor() -> None:

@@ -1,5 +1,5 @@
 """Enable `python -m cartright <subcommand>`."""
 
-from cartright.cli import main
+from cartright.cli import run
 
-raise SystemExit(main())
+raise SystemExit(run())
