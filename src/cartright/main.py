@@ -52,6 +52,8 @@ def _start_scheduler(engine: ShoppingEngine, twilio: TwilioSmsAdapter) -> None: 
             "twilio": twilio,
             "user_number": os.environ["CARTRIGHT_USER_NUMBER"],
             "review_base_url": os.environ["CARTRIGHT_REVIEW_BASE_URL"],
+            # Same secret the /review route verifies with, so alert links resolve.
+            "review_token_secret": os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
             "interval_seconds": interval,
         },
         daemon=True,
@@ -78,6 +80,8 @@ def build_app() -> FastAPI:  # pragma: no cover - production wiring
         twilio_auth_token=os.environ["TWILIO_AUTH_TOKEN"],
         # Fail-closed by default; only an explicit "0" disables signature checks.
         validate_twilio_signature=os.environ.get("CARTRIGHT_VALIDATE_TWILIO_SIGNATURE", "1") != "0",
+        # When set, /review requires a valid signed token (and alert links carry one).
+        review_token_secret=os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
     )
 
     if os.environ.get("CARTRIGHT_RUN_SCHEDULER") == "1":

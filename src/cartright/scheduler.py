@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from cartright.llm.alerts import AlertComposer
+from cartright.review_links import build_review_url
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import TwilioAdapter
 from cartright.shopping_engine.engine import ReorderCandidate
@@ -27,20 +28,6 @@ def _in_window(candidate: ReorderCandidate, today: date) -> bool:
     return start <= today <= end
 
 
-def build_review_url(review_base_url: str, item_id: str, token: str | None = None) -> str:
-    """Construct an alert's review-page link from its base URL.
-
-    Centralized so the link contract has a single home: hardening ticket #27
-    will add a signed, expiring `token` to these links, and `/review` will
-    verify it. The `token` param is the seam for that - left unused here on
-    purpose (no signing in this slice), so the format stays `?item=<id>` today.
-    """
-    url = f"{review_base_url}?item={item_id}"
-    if token is not None:
-        url += f"&token={token}"
-    return url
-
-
 def run_alert_cycle_detailed(
     *,
     engine: ShoppingEngine,
@@ -48,6 +35,7 @@ def run_alert_cycle_detailed(
     twilio: TwilioAdapter,
     user_number: str,
     review_base_url: str,
+    review_token_secret: str | None = None,
     today: date | None = None,
 ) -> list[AlertOutcome]:
     """Run one pass of the proactive loop, returning a per-candidate report.
@@ -79,7 +67,9 @@ def run_alert_cycle_detailed(
                 )
             )
             continue
-        review_url = build_review_url(review_base_url, candidate.item_id)
+        review_url = build_review_url(
+            review_base_url, candidate.item_id, secret=review_token_secret
+        )
         body = composer.compose(candidate, deal, review_url)
         twilio.send_sms(to=user_number, body=body)
         outcomes.append(
@@ -97,6 +87,7 @@ def run_alert_cycle(
     twilio: TwilioAdapter,
     user_number: str,
     review_base_url: str,
+    review_token_secret: str | None = None,
     today: date | None = None,
 ) -> list[str]:
     """Run one cycle and return just the bodies of any SMS sent.
@@ -113,6 +104,7 @@ def run_alert_cycle(
             twilio=twilio,
             user_number=user_number,
             review_base_url=review_base_url,
+            review_token_secret=review_token_secret,
             today=today,
         )
         if o.sent and o.body is not None
@@ -126,6 +118,7 @@ def run_forever(
     twilio: TwilioAdapter,
     user_number: str,
     review_base_url: str,
+    review_token_secret: str | None = None,
     interval_seconds: int = 3600,
 ) -> None:  # pragma: no cover - thin production loop, no decision logic of its own
     """Production entrypoint: run `run_alert_cycle` on a fixed interval forever."""
@@ -136,5 +129,6 @@ def run_forever(
             twilio=twilio,
             user_number=user_number,
             review_base_url=review_base_url,
+            review_token_secret=review_token_secret,
         )
         time.sleep(interval_seconds)

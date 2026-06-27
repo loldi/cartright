@@ -38,6 +38,9 @@ services:
         sync: false
       - key: CARTRIGHT_VALIDATE_TWILIO_SIGNATURE
         value: "1"
+      - key: CARTRIGHT_REVIEW_TOKEN_SECRET
+        sync: false # set the SAME value in your local .env so alert-once links resolve
+
       - key: CARTRIGHT_RUN_SCHEDULER
         value: "1"
       - key: CARTRIGHT_SCHEDULER_INTERVAL_SECONDS

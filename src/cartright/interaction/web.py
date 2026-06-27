@@ -52,6 +52,7 @@ def create_app(
     user_number: str,
     twilio_auth_token: str | None = None,
     validate_twilio_signature: bool = True,
+    review_token_secret: str | None = None,
 ) -> FastAPI:
     """Build the Cartright web app wired to the given dependencies.
 
@@ -85,6 +86,6 @@ def create_app(
         return Response(content=_EMPTY_TWIML, media_type="application/xml")
 
     # The review-order UI is a separate surface; compose its routes in here.
-    app.include_router(review_router(engine))
+    app.include_router(review_router(engine, token_secret=review_token_secret))
 
     return app

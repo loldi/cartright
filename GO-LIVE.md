@@ -23,6 +23,9 @@ walmart.io credential setup, and the "Secure operations" notes.
 ## 1. Configure
 
 - [ ] Copy [`.env.example`](.env.example) to `.env` and fill in every value.
+- [ ] Generate `CARTRIGHT_REVIEW_TOKEN_SECRET` (`openssl rand -hex 32`) and set
+      the **same** value in `.env` and on the host — it signs review links and is
+      verified by `/review`, so a mismatch makes alert links 403.
 
 ## 2. Preflight (no network)
 

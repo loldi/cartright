@@ -51,6 +51,7 @@ set these as host secrets):
 | `CARTRIGHT_DB_PATH` | engine | file-backed SQLite path (default `cartright.db`) |
 | `CARTRIGHT_REVIEW_BASE_URL` | scheduler | public base URL of `/review`, used in alert links |
 | `CARTRIGHT_VALIDATE_TWILIO_SIGNATURE` | app | validate `X-Twilio-Signature` on `/sms`; default on, set `0` to disable |
+| `CARTRIGHT_REVIEW_TOKEN_SECRET` | app | HMAC secret for signed review links; when set, `/review` requires a valid token. Use the same value locally and on the host |
 | `CARTRIGHT_RUN_SCHEDULER` | app | `1` to run the alert loop in-process |
 | `CARTRIGHT_SCHEDULER_INTERVAL_SECONDS` | scheduler | alert-loop interval (default `3600`) |
 
@@ -157,6 +158,10 @@ plus your personal order history). Once it's live:
   request signature and the Twilio auth header stay out of your logs; those
   tools would change that. The app itself does no logging and returns generic
   `500`s (no stack traces to clients).
+- **The `/review` endpoint is rate-limited and item-capped, and (when
+  `CARTRIGHT_REVIEW_TOKEN_SECRET` is set) requires a signed, non-expired link
+  token** — so a stranger who finds the URL can't drive walmart.io calls. Set
+  the secret in production.
 - **Keep dependencies pinned** (`uv.lock` with hashes); update deliberately.
 
 ## Deliberately excluded from this repo

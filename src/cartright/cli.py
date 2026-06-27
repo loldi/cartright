@@ -171,6 +171,7 @@ def alert_once(
     *,
     user_number: str,
     review_base_url: str,
+    review_token_secret: str | None = None,
     today: date | None = None,
     out: TextIO = sys.stdout,
 ) -> int:
@@ -185,6 +186,7 @@ def alert_once(
         twilio=twilio,
         user_number=user_number,
         review_base_url=review_base_url,
+        review_token_secret=review_token_secret,
         today=today,
     )
     sent = [o for o in outcomes if o.sent]
@@ -217,6 +219,7 @@ def _alert_once_cmd() -> int:  # pragma: no cover - thin from_env wiring
         TwilioSmsAdapter.from_env(),
         user_number=os.environ["CARTRIGHT_USER_NUMBER"],
         review_base_url=os.environ["CARTRIGHT_REVIEW_BASE_URL"],
+        review_token_secret=os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
     )
 
 
