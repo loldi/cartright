@@ -27,11 +27,15 @@ class CatalogPricingAdapter(ABC):
     def get_price(self, item_id: str) -> dict[str, Any]: ...
 
 
-class TwilioAdapter(ABC):
-    """Sends and receives SMS for the single private number this project uses."""
+class Messenger(ABC):
+    """Sends a text message to the single private recipient this project serves.
+
+    Transport-agnostic on purpose: the engine, scheduler, and conversation layer
+    only need "send some text to a recipient handle". The concrete adapter
+    (Telegram today) owns the wire details. Inbound is push-based (a webhook),
+    so there is no receive method here - the web layer hands inbound text
+    straight to `handle_inbound_preference`.
+    """
 
     @abstractmethod
-    def send_sms(self, to: str, body: str) -> None: ...
-
-    @abstractmethod
-    def receive_sms(self) -> list[dict[str, Any]]: ...
+    def send_message(self, to: str, body: str) -> None: ...

@@ -2,9 +2,9 @@
 
 Everywhere else in this project the adapter boundary is filled with fakes (per
 the PRD's Testing Decisions). This module is the one place that assembles the
-*real* adapters - live Claude completions, real Twilio SMS, real walmart.io
-pricing, real scraped order history, a file-backed SQLite store - into a running
-service. It is deliberately thin wiring with no decision logic of its own, so it
+*real* adapters - live Claude completions, real Telegram messaging, real
+walmart.io pricing, real scraped order history, a file-backed SQLite store - into
+a running service. It is deliberately thin wiring with no decision logic of its own, so it
 carries no unit tests (`# pragma: no cover`); every behavioral piece it composes
 is tested in isolation against fakes.
 
@@ -28,7 +28,7 @@ from cartright.llm.claude import ClaudeAlertComposer, ClaudePreferenceParser
 from cartright.scheduler import run_forever
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.order_history import JsonFileOrderHistoryAdapter
-from cartright.shopping_engine.adapters.twilio_sms import TwilioSmsAdapter
+from cartright.shopping_engine.adapters.telegram import TelegramMessenger
 from cartright.shopping_engine.adapters.walmart import WalmartCatalogPricingAdapter
 
 
@@ -41,7 +41,9 @@ def build_engine() -> ShoppingEngine:  # pragma: no cover - production wiring
     )
 
 
-def _start_scheduler(engine: ShoppingEngine, twilio: TwilioSmsAdapter) -> None:  # pragma: no cover
+def _start_scheduler(
+    engine: ShoppingEngine, messenger: TelegramMessenger
+) -> None:  # pragma: no cover
     """Run the proactive alert loop in a daemon thread alongside the web app."""
     interval = int(os.environ.get("CARTRIGHT_SCHEDULER_INTERVAL_SECONDS", "3600"))
     thread = threading.Thread(
@@ -49,8 +51,8 @@ def _start_scheduler(engine: ShoppingEngine, twilio: TwilioSmsAdapter) -> None: 
         kwargs={
             "engine": engine,
             "composer": ClaudeAlertComposer(),
-            "twilio": twilio,
-            "user_number": os.environ["CARTRIGHT_USER_NUMBER"],
+            "messenger": messenger,
+            "user_chat_id": os.environ["CARTRIGHT_USER_CHAT_ID"],
             "review_base_url": os.environ["CARTRIGHT_REVIEW_BASE_URL"],
             # Same secret the /review route verifies with, so alert links resolve.
             "review_token_secret": os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
@@ -69,22 +71,22 @@ def build_app() -> FastAPI:  # pragma: no cover - production wiring
     time and credentials are only required when the service actually boots.
     """
     engine = build_engine()
-    twilio = TwilioSmsAdapter.from_env()
-    user_number = os.environ["CARTRIGHT_USER_NUMBER"]
+    messenger = TelegramMessenger.from_env()
+    user_chat_id = os.environ["CARTRIGHT_USER_CHAT_ID"]
 
     app = create_app(
         parser=ClaudePreferenceParser(),
         engine=engine,
-        twilio=twilio,
-        user_number=user_number,
-        twilio_auth_token=os.environ["TWILIO_AUTH_TOKEN"],
-        # Fail-closed by default; only an explicit "0" disables signature checks.
-        validate_twilio_signature=os.environ.get("CARTRIGHT_VALIDATE_TWILIO_SIGNATURE", "1") != "0",
+        messenger=messenger,
+        user_chat_id=user_chat_id,
+        webhook_secret=os.environ.get("TELEGRAM_WEBHOOK_SECRET"),
+        # Fail-closed by default; only an explicit "0" disables the secret check.
+        validate_webhook=os.environ.get("CARTRIGHT_VALIDATE_TELEGRAM_SECRET", "1") != "0",
         # When set, /review requires a valid signed token (and alert links carry one).
         review_token_secret=os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
     )
 
     if os.environ.get("CARTRIGHT_RUN_SCHEDULER") == "1":
-        _start_scheduler(engine, twilio)
+        _start_scheduler(engine, messenger)
 
     return app

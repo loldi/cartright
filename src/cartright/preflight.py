@@ -20,10 +20,10 @@ from cartright.shopping_engine.adapters.walmart import _load_private_key
 # defaults and so are deliberately not gated here.
 _REQUIRED = {
     "Claude": ["ANTHROPIC_API_KEY"],
-    "Twilio": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
+    "Telegram": ["TELEGRAM_BOT_TOKEN"],
     "walmart.io": ["WM_CONSUMER_ID", "WM_PRIVATE_KEY"],
     "Cartright": [
-        "CARTRIGHT_USER_NUMBER",
+        "CARTRIGHT_USER_CHAT_ID",
         "CARTRIGHT_ORDER_HISTORY_PATH",
         "CARTRIGHT_REVIEW_BASE_URL",
     ],
@@ -38,9 +38,15 @@ class CheckResult:
     detail: str  # human-readable; never contains a secret value
 
 
-def _is_e164(value: str) -> bool:
-    digits = value[1:]
-    return value.startswith("+") and digits.isdigit() and 1 <= len(digits) <= 15
+def _is_chat_id(value: str) -> bool:
+    # Telegram chat ids are integers (negative for groups/channels).
+    return value.lstrip("-").isdigit()
+
+
+def _is_bot_token(value: str) -> bool:
+    # Telegram bot tokens look like "<digits>:<~35 url-safe chars>".
+    head, sep, tail = value.partition(":")
+    return bool(sep) and head.isdigit() and len(tail) >= 20
 
 
 def _is_https_url(value: str) -> bool:
@@ -52,8 +58,9 @@ def run_doctor_checks(env: Mapping[str, str]) -> list[CheckResult]:
     """Validate the runtime config. Pure: an env mapping in, results out.
 
     Beyond presence, applies the format checks that catch the mistakes that only
-    bite at boot or on the first live call: an unparseable signing key, a phone
-    number that isn't E.164, a missing order-history file, a non-https review URL.
+    bite at boot or on the first live call: an unparseable signing key, a
+    malformed bot token or chat id, a missing order-history file, a non-https
+    review URL.
     """
     results: list[CheckResult] = []
 
@@ -74,18 +81,31 @@ def run_doctor_checks(env: Mapping[str, str]) -> list[CheckResult]:
             ok = False
         results.append(CheckResult("walmart.io", "WM_PRIVATE_KEY", ok, detail))
 
-    for name in ("CARTRIGHT_USER_NUMBER", "TWILIO_FROM_NUMBER"):
-        value = env.get(name, "").strip()
-        if value:
-            ok = _is_e164(value)
-            results.append(
-                CheckResult(
-                    "Cartright" if name.startswith("CARTRIGHT") else "Twilio",
-                    name,
-                    ok,
-                    "valid E.164 format" if ok else "not E.164 format (expected +<digits>)",
-                )
+    token = env.get("TELEGRAM_BOT_TOKEN", "").strip()
+    if token:
+        ok = _is_bot_token(token)
+        results.append(
+            CheckResult(
+                "Telegram",
+                "TELEGRAM_BOT_TOKEN",
+                ok,
+                "looks like a Telegram bot token"
+                if ok
+                else "not a bot-token shape (<digits>:<token>)",
             )
+        )
+
+    chat_id = env.get("CARTRIGHT_USER_CHAT_ID", "").strip()
+    if chat_id:
+        ok = _is_chat_id(chat_id)
+        results.append(
+            CheckResult(
+                "Cartright",
+                "CARTRIGHT_USER_CHAT_ID",
+                ok,
+                "valid chat id (integer)" if ok else "not an integer chat id",
+            )
+        )
 
     path = env.get("CARTRIGHT_ORDER_HISTORY_PATH", "").strip()
     if path:
@@ -131,9 +151,7 @@ def readiness(env: Mapping[str, str]) -> dict[str, bool]:
 
     return {
         "anthropic_configured": configured("ANTHROPIC_API_KEY"),
-        "twilio_configured": configured(
-            "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"
-        ),
+        "telegram_configured": configured("TELEGRAM_BOT_TOKEN"),
         "walmart_configured": configured("WM_CONSUMER_ID", "WM_PRIVATE_KEY"),
         "order_history_present": configured("CARTRIGHT_ORDER_HISTORY_PATH"),
         "scheduler_enabled": env.get("CARTRIGHT_RUN_SCHEDULER") == "1",

@@ -14,8 +14,8 @@ from cartright.scheduler import run_alert_cycle
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
 from cartright.shopping_engine.adapters.fixtures import (
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 from cartright.shopping_engine.engine import ReorderCandidate
 from cartright.shopping_engine.pricing import DealEvaluation
@@ -87,13 +87,13 @@ def test_scheduler_alerts_independently_for_each_in_window_item_without_cross_su
     )
     engine = make_engine(catalog)
     composer = _RecordingComposer()
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
 
     sent = run_alert_cycle(
         engine=engine,
         composer=composer,
-        twilio=twilio,
-        user_number="+15555550123",
+        messenger=messenger,
+        user_chat_id="987654321",
         review_base_url="https://example.test/review",
         today=TODAY,
     )
@@ -101,7 +101,7 @@ def test_scheduler_alerts_independently_for_each_in_window_item_without_cross_su
     assert len(sent) == 2
     alerted_items = {call[0].item_id for call in composer.calls}
     assert alerted_items == {PAPER_TOWELS, COFFEE}
-    assert len(twilio.sent) == 2
+    assert len(messenger.sent) == 2
     assert DISH_SOAP not in catalog.queried
     assert PAPER_TOWELS in catalog.queried
     assert COFFEE in catalog.queried

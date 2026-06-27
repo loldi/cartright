@@ -4,8 +4,8 @@ from typing import Any
 
 from cartright.shopping_engine.adapters.base import (
     CatalogPricingAdapter,
+    Messenger,
     OrderHistoryAdapter,
-    TwilioAdapter,
 )
 
 
@@ -27,19 +27,11 @@ class FixtureCatalogPricingAdapter(CatalogPricingAdapter):
         return self._prices.get(item_id, {})
 
 
-class FixtureTwilioAdapter(TwilioAdapter):
-    """In-memory Twilio stand-in: records sent SMS, lets tests queue inbound SMS."""
+class FixtureMessenger(Messenger):
+    """In-memory Messenger stand-in: records every message sent, for assertions."""
 
     def __init__(self) -> None:
         self.sent: list[dict[str, str]] = []
-        self._inbox: list[dict[str, str]] = []
 
-    def send_sms(self, to: str, body: str) -> None:
+    def send_message(self, to: str, body: str) -> None:
         self.sent.append({"to": to, "body": body})
-
-    def receive_sms(self) -> list[dict[str, str]]:
-        inbox, self._inbox = self._inbox, []
-        return inbox
-
-    def queue_inbound(self, frm: str, body: str) -> None:
-        self._inbox.append({"from": frm, "body": body})

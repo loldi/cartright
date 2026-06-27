@@ -6,11 +6,11 @@ from cartright.llm.preferences import ParsedPreference
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.fixtures import (
     FixtureCatalogPricingAdapter,
+    FixtureMessenger,
     FixtureOrderHistoryAdapter,
-    FixtureTwilioAdapter,
 )
 
-USER = "+15555550123"
+USER_CHAT_ID = "987654321"
 
 
 class FakeParser:
@@ -32,9 +32,20 @@ def make_engine() -> ShoppingEngine:
     )
 
 
+def _update(chat_id: str, text: str) -> dict[str, object]:
+    return {
+        "update_id": 1,
+        "message": {
+            "from": {"id": int(chat_id)},
+            "chat": {"id": int(chat_id), "type": "private"},
+            "text": text,
+        },
+    }
+
+
 def test_inbound_preference_is_recorded_and_confirmed() -> None:
     engine = make_engine()
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
     parser = FakeParser(
         ParsedPreference(
             item_id="paper-towels",
@@ -45,22 +56,22 @@ def test_inbound_preference_is_recorded_and_confirmed() -> None:
 
     confirmation = handle_inbound_preference(
         "always get the Bounty, never the store brand",
-        to=USER,
+        to=USER_CHAT_ID,
         parser=parser,
         engine=engine,
-        twilio=twilio,
+        messenger=messenger,
     )
 
     pref = engine.getPreference("paper-towels")
     assert pref is not None
     assert pref.source == "explicit"
     assert pref.attributes == {"brand": "Bounty", "substitution_ok": False}
-    assert twilio.sent == [{"to": USER, "body": confirmation}]
+    assert messenger.sent == [{"to": USER_CHAT_ID, "body": confirmation}]
 
 
-def test_sms_webhook_captures_preference_end_to_end() -> None:
+def test_telegram_webhook_captures_preference_end_to_end() -> None:
     engine = make_engine()
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
     parser = FakeParser(
         ParsedPreference(
             item_id="coffee",
@@ -72,37 +83,37 @@ def test_sms_webhook_captures_preference_end_to_end() -> None:
         create_app(
             parser=parser,
             engine=engine,
-            twilio=twilio,
-            user_number=USER,
-            validate_twilio_signature=False,
+            messenger=messenger,
+            user_chat_id=USER_CHAT_ID,
+            validate_webhook=False,
         )
     )
 
-    response = client.post("/sms", data={"From": USER, "Body": "I only drink Peet's"})
+    response = client.post("/telegram", json=_update(USER_CHAT_ID, "I only drink Peet's"))
 
     assert response.status_code == 200
     assert parser.seen == ["I only drink Peet's"]
     assert engine.getPreference("coffee") is not None
-    assert twilio.sent == [{"to": USER, "body": "Noted - Peet's coffee from now on."}]
+    assert messenger.sent == [{"to": USER_CHAT_ID, "body": "Noted - Peet's coffee from now on."}]
 
 
-def test_sms_webhook_ignores_messages_from_other_numbers() -> None:
+def test_telegram_webhook_ignores_messages_from_other_chats() -> None:
     engine = make_engine()
-    twilio = FixtureTwilioAdapter()
+    messenger = FixtureMessenger()
     parser = FakeParser(ParsedPreference(item_id="coffee", attributes={}, confirmation="ok"))
     client = TestClient(
         create_app(
             parser=parser,
             engine=engine,
-            twilio=twilio,
-            user_number=USER,
-            validate_twilio_signature=False,
+            messenger=messenger,
+            user_chat_id=USER_CHAT_ID,
+            validate_webhook=False,
         )
     )
 
-    response = client.post("/sms", data={"From": "+19998887777", "Body": "I only drink Peet's"})
+    response = client.post("/telegram", json=_update("11112222", "I only drink Peet's"))
 
     assert response.status_code == 200
     assert parser.seen == []
-    assert twilio.sent == []
+    assert messenger.sent == []
     assert engine.getPreference("coffee") is None
