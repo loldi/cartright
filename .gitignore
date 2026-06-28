@@ -31,6 +31,9 @@ RETROSPECTIVE.md
 .claude/
 review-sample.html
 
+# Working drafts (local-only until promoted into a tracked doc)
+*.draft.md
+
 # Design artifacts, not product code
 Cartright Architecture Deck.pdf
 Cartright Architecture Deck-v2.pdf
