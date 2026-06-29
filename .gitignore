@@ -17,6 +17,9 @@ venv/
 orders.json
 *orders*.json
 
+# Local-only seed/import tooling: operates on real personal data, excluded per PRD.
+scripts/local/
+
 # Editor / OS
 .DS_Store
 .vscode/
