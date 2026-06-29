@@ -66,7 +66,9 @@ def test_inbound_preference_is_recorded_and_confirmed() -> None:
     assert pref is not None
     assert pref.source == "explicit"
     assert pref.attributes == {"brand": "Bounty", "substitution_ok": False}
-    assert messenger.sent == [{"to": USER_CHAT_ID, "body": confirmation}]
+    assert [{"to": s["to"], "body": s["body"]} for s in messenger.sent] == [
+        {"to": USER_CHAT_ID, "body": confirmation}
+    ]
 
 
 def test_telegram_webhook_captures_preference_end_to_end() -> None:
@@ -94,7 +96,9 @@ def test_telegram_webhook_captures_preference_end_to_end() -> None:
     assert response.status_code == 200
     assert parser.seen == ["I only drink Peet's"]
     assert engine.getPreference("coffee") is not None
-    assert messenger.sent == [{"to": USER_CHAT_ID, "body": "Noted - Peet's coffee from now on."}]
+    assert [{"to": s["to"], "body": s["body"]} for s in messenger.sent] == [
+        {"to": USER_CHAT_ID, "body": "Noted - Peet's coffee from now on."}
+    ]
 
 
 def test_telegram_webhook_ignores_messages_from_other_chats() -> None:

@@ -174,6 +174,22 @@ class ShoppingEngine:
             for row in rows
         ]
 
+    def lastPaidPrice(self, item_id: str) -> float | None:
+        """The price paid on the most recent past order of this item.
+
+        `None` if there's no order history for it at all - shouldn't happen
+        for a real reorder candidate (which by definition has at least two
+        prior orders to infer a window from), but a candidate with a missing
+        `price` field on its latest order is a real possibility worth
+        tolerating rather than crashing the alert cycle over.
+        """
+        orders = self._order_history.get_orders(item_id)
+        if not orders:
+            return None
+        latest = max(orders, key=lambda o: o["ordered_at"])
+        price = latest.get("price")
+        return float(price) if price is not None else None
+
     def lastAlertedPrice(self, item_id: str, window_start: str, window_end: str) -> float | None:
         """The price a sent alert most recently quoted for this exact reorder
         window, or `None` if nothing's been sent for it yet.

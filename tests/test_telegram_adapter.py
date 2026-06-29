@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -36,7 +37,55 @@ def test_send_message_posts_to_send_message_with_chat_id_and_text() -> None:
     assert seen["json"] == {
         "chat_id": "987654321",
         "text": "Deal on coffee: https://x.test/review",
+        "disable_web_page_preview": True,
     }
+
+
+def test_send_message_with_parse_mode_and_button_includes_both() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["json"] = json.loads(request.content)
+        return httpx.Response(200, json={"ok": True})
+
+    _adapter(handler).send_message(
+        to="987654321",
+        body="<b>Hey</b>",
+        parse_mode="HTML",
+        button_text="Add to Walmart cart →",
+        button_url="https://affil.walmart.com/cart/addToCart?items=1_1",
+    )
+
+    assert seen["json"] == {
+        "chat_id": "987654321",
+        "text": "<b>Hey</b>",
+        "disable_web_page_preview": True,
+        "parse_mode": "HTML",
+        "reply_markup": {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "Add to Walmart cart →",
+                        "url": "https://affil.walmart.com/cart/addToCart?items=1_1",
+                    }
+                ]
+            ]
+        },
+    }
+
+
+def test_send_message_without_a_full_button_pair_omits_reply_markup() -> None:
+    """A button needs both text and url - a partial pair is treated as no button,
+    not a malformed Telegram payload."""
+    payload: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload.update(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True})
+
+    _adapter(handler).send_message(to="987654321", body="hi", button_text="Tap me")
+
+    assert "reply_markup" not in payload
 
 
 def test_non_ok_response_raises_and_never_leaks_the_token() -> None:

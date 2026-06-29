@@ -171,7 +171,15 @@ def test_message_check_sends_one_message() -> None:
 class _BoomMessenger(Messenger):
     """A messenger whose send raises an error carrying the token-bearing URL."""
 
-    def send_message(self, to: str, body: str) -> None:
+    def send_message(
+        self,
+        to: str,
+        body: str,
+        *,
+        parse_mode: str | None = None,
+        button_text: str | None = None,
+        button_url: str | None = None,
+    ) -> None:
         raise _FakeHttpError()
 
 

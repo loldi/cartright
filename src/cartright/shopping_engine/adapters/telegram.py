@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 import httpx
 
@@ -38,16 +39,40 @@ class TelegramMessenger(Messenger):
         """Production constructor: bot token from the environment."""
         return cls(os.environ["TELEGRAM_BOT_TOKEN"])
 
-    def send_message(self, to: str, body: str) -> None:
+    def send_message(
+        self,
+        to: str,
+        body: str,
+        *,
+        parse_mode: str | None = None,
+        button_text: str | None = None,
+        button_url: str | None = None,
+    ) -> None:
         """Send `body` to chat id `to`. Raises on a non-OK Bot API response.
+
+        Link previews are always disabled: a real product URL anywhere in the
+        message (the linked item name, or a future deep link) would otherwise
+        balloon into a large OpenGraph preview card - caught live, see
+        PRD.md's "Alert message format" decision.
 
         The token lives in the request URL, so on failure we surface Telegram's
         own `description` (or a truncated body) and the status code - never the
         URL or the raw exception, either of which would leak the token.
         """
+        payload: dict[str, Any] = {
+            "chat_id": to,
+            "text": body,
+            "disable_web_page_preview": True,
+        }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        if button_text and button_url:
+            payload["reply_markup"] = {
+                "inline_keyboard": [[{"text": button_text, "url": button_url}]]
+            }
         response = self._client.post(
             f"{self._api_base}/bot{self._token}/sendMessage",
-            json={"chat_id": to, "text": body},
+            json=payload,
         )
         if response.status_code != 200:
             detail = ""

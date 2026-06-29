@@ -17,6 +17,7 @@ class DealEvaluation:
     current_price: float | None
     reference_price: float | None
     savings: float
+    product_url: str | None = None
 
 
 def evaluate_deal(item_id: str, price: dict[str, Any]) -> DealEvaluation:
@@ -26,19 +27,20 @@ def evaluate_deal(item_id: str, price: dict[str, Any]) -> DealEvaluation:
     have a reference (`was_price`) to discount from, and be marked down by at
     least `DEAL_MIN_DISCOUNT`. Anything else is not a deal.
     """
+    product_url = price.get("product_url") if price else None
     if not price or not price.get("in_stock", False):
-        return DealEvaluation(item_id, False, None, None, 0.0)
+        return DealEvaluation(item_id, False, None, None, 0.0, product_url)
 
     current = float(price["price"])
     reference_raw = price.get("was_price")
     if reference_raw is None:
-        return DealEvaluation(item_id, False, current, None, 0.0)
+        return DealEvaluation(item_id, False, current, None, 0.0, product_url)
 
     reference = float(reference_raw)
     discount = (reference - current) / reference if reference > 0 else 0.0
     is_deal = current < reference and discount >= DEAL_MIN_DISCOUNT
     savings = round(reference - current, 2) if is_deal else 0.0
-    return DealEvaluation(item_id, is_deal, current, reference, savings)
+    return DealEvaluation(item_id, is_deal, current, reference, savings, product_url)
 
 
 @dataclass(frozen=True)

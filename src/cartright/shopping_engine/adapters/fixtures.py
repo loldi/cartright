@@ -31,7 +31,23 @@ class FixtureMessenger(Messenger):
     """In-memory Messenger stand-in: records every message sent, for assertions."""
 
     def __init__(self) -> None:
-        self.sent: list[dict[str, str]] = []
+        self.sent: list[dict[str, str | None]] = []
 
-    def send_message(self, to: str, body: str) -> None:
-        self.sent.append({"to": to, "body": body})
+    def send_message(
+        self,
+        to: str,
+        body: str,
+        *,
+        parse_mode: str | None = None,
+        button_text: str | None = None,
+        button_url: str | None = None,
+    ) -> None:
+        self.sent.append(
+            {
+                "to": to,
+                "body": body,
+                "parse_mode": parse_mode,
+                "button_text": button_text,
+                "button_url": button_url,
+            }
+        )

@@ -149,6 +149,31 @@ def test_installment_only_item_with_no_sale_price_is_unavailable_and_unpriced() 
     assert "price" not in price
 
 
+def test_maps_product_url_when_present() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "items": [
+                    _item(productUrl="https://www.walmart.com/ip/Great-Value-Paper-Towels/10295020")
+                ]
+            },
+        )
+
+    price = _make_adapter(handler).get_price("10295020")
+
+    assert price["product_url"] == "https://www.walmart.com/ip/Great-Value-Paper-Towels/10295020"
+
+
+def test_no_product_url_key_when_walmart_io_omits_it() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"items": [_item()]})
+
+    price = _make_adapter(handler).get_price("10295020")
+
+    assert "product_url" not in price
+
+
 def test_handles_a_bare_single_item_response_body() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=_item())

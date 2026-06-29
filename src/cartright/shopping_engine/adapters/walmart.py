@@ -185,4 +185,7 @@ def _to_price(item: dict[str, Any], item_id: str) -> dict[str, Any]:
     msrp = item.get("msrp")
     if msrp is not None:
         price["was_price"] = float(msrp)
+    product_url = item.get("productUrl")
+    if product_url is not None:
+        price["product_url"] = str(product_url)
     return price

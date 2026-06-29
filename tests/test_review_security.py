@@ -131,3 +131,15 @@ def test_token_for_other_items_does_not_authorize_these_items() -> None:
 
     assert response.status_code == 403
     assert catalog.queried == []
+
+
+def test_build_review_url_is_plain_without_a_secret() -> None:
+    assert build_review_url("https://x.test/review", "abc") == "https://x.test/review?item=abc"
+
+
+def test_build_review_url_signs_when_a_secret_is_given() -> None:
+    url = build_review_url("https://x.test/review", "abc", secret="s3cr3t", now=1000)
+
+    # Signed links carry the item, an expiry, and an HMAC token.
+    assert url.startswith("https://x.test/review?item=abc&exp=")
+    assert "token=" in url

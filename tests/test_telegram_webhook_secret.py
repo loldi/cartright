@@ -72,7 +72,9 @@ def test_valid_secret_is_accepted_and_records_the_preference() -> None:
 
     assert response.status_code == 200
     assert engine.getPreference("coffee") is not None
-    assert messenger.sent == [{"to": USER_CHAT_ID, "body": "Got it."}]
+    assert [{"to": s["to"], "body": s["body"]} for s in messenger.sent] == [
+        {"to": USER_CHAT_ID, "body": "Got it."}
+    ]
 
 
 def test_missing_secret_is_rejected_fail_closed() -> None:

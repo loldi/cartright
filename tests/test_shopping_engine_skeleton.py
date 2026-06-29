@@ -27,4 +27,6 @@ def test_fixture_messenger_records_sent_messages() -> None:
 
     messenger.send_message(to="987654321", body="Bounty is on sale, want it?")
 
-    assert messenger.sent == [{"to": "987654321", "body": "Bounty is on sale, want it?"}]
+    assert [{"to": s["to"], "body": s["body"]} for s in messenger.sent] == [
+        {"to": "987654321", "body": "Bounty is on sale, want it?"}
+    ]

@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
-from urllib.parse import urlparse
 
 from cartright.shopping_engine.adapters.walmart import _load_private_key
 
@@ -25,7 +24,6 @@ _REQUIRED = {
     "Cartright": [
         "CARTRIGHT_USER_CHAT_ID",
         "CARTRIGHT_ORDER_HISTORY_PATH",
-        "CARTRIGHT_REVIEW_BASE_URL",
     ],
 }
 
@@ -47,11 +45,6 @@ def _is_bot_token(value: str) -> bool:
     # Telegram bot tokens look like "<digits>:<~35 url-safe chars>".
     head, sep, tail = value.partition(":")
     return bool(sep) and head.isdigit() and len(tail) >= 20
-
-
-def _is_https_url(value: str) -> bool:
-    parsed = urlparse(value)
-    return parsed.scheme == "https" and bool(parsed.netloc)
 
 
 def run_doctor_checks(env: Mapping[str, str]) -> list[CheckResult]:
@@ -116,18 +109,6 @@ def run_doctor_checks(env: Mapping[str, str]) -> list[CheckResult]:
                 "CARTRIGHT_ORDER_HISTORY_PATH",
                 ok,
                 "found and readable" if ok else f"not found / unreadable: {path}",
-            )
-        )
-
-    url = env.get("CARTRIGHT_REVIEW_BASE_URL", "").strip()
-    if url:
-        ok = _is_https_url(url)
-        results.append(
-            CheckResult(
-                "Cartright",
-                "CARTRIGHT_REVIEW_BASE_URL",
-                ok,
-                f"valid https URL ({url})" if ok else "not a valid https URL",
             )
         )
 

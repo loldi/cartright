@@ -11,15 +11,13 @@ from datetime import date
 from typing import Any
 
 from cartright.cli import alert_once
-from cartright.review_links import build_review_url
+from cartright.llm.alerts import DealAlert
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
 from cartright.shopping_engine.adapters.fixtures import (
     FixtureMessenger,
     FixtureOrderHistoryAdapter,
 )
-from cartright.shopping_engine.engine import ReorderCandidate
-from cartright.shopping_engine.pricing import DealEvaluation
 
 PAPER_TOWELS = "10295020"
 COFFEE = "37774610"
@@ -27,10 +25,10 @@ TODAY = date(2026, 6, 21)
 
 # Paper towels window contains TODAY; coffee's window is well before it.
 ORDERS = [
-    {"item_id": PAPER_TOWELS, "title": "Paper Towels", "ordered_at": "2026-06-01"},
-    {"item_id": PAPER_TOWELS, "title": "Paper Towels", "ordered_at": "2026-06-11"},
-    {"item_id": COFFEE, "title": "Coffee", "ordered_at": "2026-05-01"},
-    {"item_id": COFFEE, "title": "Coffee", "ordered_at": "2026-05-08"},
+    {"item_id": PAPER_TOWELS, "title": "Paper Towels", "ordered_at": "2026-06-01", "price": 10.97},
+    {"item_id": PAPER_TOWELS, "title": "Paper Towels", "ordered_at": "2026-06-11", "price": 10.97},
+    {"item_id": COFFEE, "title": "Coffee", "ordered_at": "2026-05-01", "price": 7.00},
+    {"item_id": COFFEE, "title": "Coffee", "ordered_at": "2026-05-08", "price": 7.00},
 ]
 
 
@@ -43,8 +41,8 @@ class _Catalog(CatalogPricingAdapter):
 
 
 class _FakeComposer:
-    def compose(self, candidate: ReorderCandidate, deal: DealEvaluation, review_url: str) -> str:
-        return f"Deal on {candidate.title}: {review_url}"
+    def compose(self, deals: list[DealAlert]) -> str:
+        return f"Deal on {', '.join(d.title for d in deals)}"
 
 
 def _engine(prices: dict[str, dict[str, Any]]) -> ShoppingEngine:
@@ -68,7 +66,6 @@ def test_alert_once_reports_sent_and_skipped() -> None:
         _FakeComposer(),
         messenger,
         user_chat_id="987654321",
-        review_base_url="https://x.test/review",
         today=TODAY,
         out=out,
     )
@@ -92,7 +89,6 @@ def test_alert_once_sends_nothing_when_no_deal() -> None:
         _FakeComposer(),
         messenger,
         user_chat_id="987654321",
-        review_base_url="https://x.test/review",
         today=TODAY,
         out=out,
     )
@@ -100,15 +96,3 @@ def test_alert_once_sends_nothing_when_no_deal() -> None:
     assert code == 0
     assert "0 sent" in out.getvalue()
     assert messenger.sent == []
-
-
-def test_build_review_url_is_plain_without_a_secret() -> None:
-    assert build_review_url("https://x.test/review", "abc") == "https://x.test/review?item=abc"
-
-
-def test_build_review_url_signs_when_a_secret_is_given() -> None:
-    url = build_review_url("https://x.test/review", "abc", secret="s3cr3t", now=1000)
-
-    # Signed links carry the item, an expiry, and an HMAC token.
-    assert url.startswith("https://x.test/review?item=abc&exp=")
-    assert "token=" in url

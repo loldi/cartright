@@ -43,7 +43,6 @@ def _full_env(orders_path: str) -> dict[str, str]:
         "WM_PRIVATE_KEY": _pem_key(),
         "CARTRIGHT_USER_CHAT_ID": "987654321",
         "CARTRIGHT_ORDER_HISTORY_PATH": orders_path,
-        "CARTRIGHT_REVIEW_BASE_URL": "https://cartright.example.com/review",
     }
 
 
@@ -73,7 +72,6 @@ def test_each_missing_required_var_fails(tmp_path: Path) -> None:
         "WM_PRIVATE_KEY",
         "CARTRIGHT_USER_CHAT_ID",
         "CARTRIGHT_ORDER_HISTORY_PATH",
-        "CARTRIGHT_REVIEW_BASE_URL",
     ]:
         env = dict(base)
         del env[var]
@@ -108,13 +106,6 @@ def test_missing_order_history_file_fails(tmp_path: Path) -> None:
     assert _failed(run_doctor_checks(env), "CARTRIGHT_ORDER_HISTORY_PATH")
 
 
-def test_non_https_review_url_fails(tmp_path: Path) -> None:
-    env = _full_env(_orders_file(tmp_path))
-    env["CARTRIGHT_REVIEW_BASE_URL"] = "http://insecure.example.com/review"
-
-    assert _failed(run_doctor_checks(env), "CARTRIGHT_REVIEW_BASE_URL")
-
-
 def test_report_never_prints_secret_values(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -146,7 +137,6 @@ def test_main_doctor_returns_nonzero_when_misconfigured(monkeypatch: pytest.Monk
         "WM_PRIVATE_KEY",
         "CARTRIGHT_USER_CHAT_ID",
         "CARTRIGHT_ORDER_HISTORY_PATH",
-        "CARTRIGHT_REVIEW_BASE_URL",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -183,8 +173,14 @@ def test_run_does_not_override_a_set_env_var(
     assert os.environ["CARTRIGHT_USER_CHAT_ID"] == "987650001"
 
 
-def test_module_entry_runs_doctor() -> None:
-    """`python -m cartright doctor` works and reports failure with no config."""
+def test_module_entry_runs_doctor(tmp_path: Path) -> None:
+    """`python -m cartright doctor` works and reports failure with no config.
+
+    Run from an empty `tmp_path`, not the real project directory: `cli.py`'s
+    `run()` auto-loads a local `.env` to fill gaps, and the real project `.env`
+    (a developer's actual secrets) would otherwise silently satisfy every
+    required var and make this "no config" test pass for the wrong reason.
+    """
     clean = {
         k: v
         for k, v in os.environ.items()
@@ -193,6 +189,7 @@ def test_module_entry_runs_doctor() -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "cartright", "doctor"],
         env=clean,
+        cwd=tmp_path,
         capture_output=True,
         text=True,
     )
@@ -209,7 +206,6 @@ def _set_env(monkeypatch: pytest.MonkeyPatch, env: Mapping[str, str]) -> None:
         "WM_PRIVATE_KEY",
         "CARTRIGHT_USER_CHAT_ID",
         "CARTRIGHT_ORDER_HISTORY_PATH",
-        "CARTRIGHT_REVIEW_BASE_URL",
     ):
         monkeypatch.delenv(var, raising=False)
     for key, value in env.items():

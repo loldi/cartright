@@ -10,6 +10,7 @@ leaving it only implicitly true.
 from datetime import date
 from typing import Any
 
+from cartright.llm.alerts import DealAlert
 from cartright.scheduler import run_alert_cycle
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
@@ -17,8 +18,6 @@ from cartright.shopping_engine.adapters.fixtures import (
     FixtureMessenger,
     FixtureOrderHistoryAdapter,
 )
-from cartright.shopping_engine.engine import ReorderCandidate
-from cartright.shopping_engine.pricing import DealEvaluation
 
 PAPER_TOWELS = "10295020"
 COFFEE = "37774610"
@@ -53,11 +52,11 @@ class _SpyCatalog(CatalogPricingAdapter):
 
 class _RecordingComposer:
     def __init__(self) -> None:
-        self.calls: list[tuple[ReorderCandidate, DealEvaluation, str]] = []
+        self.calls: list[list[DealAlert]] = []
 
-    def compose(self, candidate: ReorderCandidate, deal: DealEvaluation, review_url: str) -> str:
-        self.calls.append((candidate, deal, review_url))
-        return f"Deal on {candidate.title}: {review_url}"
+    def compose(self, deals: list[DealAlert]) -> str:
+        self.calls.append(deals)
+        return f"Deals on {', '.join(d.title for d in deals)}"
 
 
 def make_engine(catalog: CatalogPricingAdapter) -> ShoppingEngine:
@@ -75,7 +74,10 @@ def test_get_reorder_candidates_returns_independent_windows_for_three_unrelated_
     assert candidates[DISH_SOAP].window_start == "2026-01-20"
 
 
-def test_scheduler_alerts_independently_for_each_in_window_item_without_cross_suppression() -> None:
+def test_scheduler_bundles_independent_in_window_items_without_cross_suppression() -> None:
+    """Two unrelated items in-window the same cycle still both make it into the
+    one combined alert - neither suppresses the other - while dish soap, out of
+    its window, is never even deal-checked."""
     catalog = _SpyCatalog(
         {
             PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True},
@@ -94,14 +96,14 @@ def test_scheduler_alerts_independently_for_each_in_window_item_without_cross_su
         composer=composer,
         messenger=messenger,
         user_chat_id="987654321",
-        review_base_url="https://example.test/review",
         today=TODAY,
     )
 
-    assert len(sent) == 2
-    alerted_items = {call[0].item_id for call in composer.calls}
-    assert alerted_items == {PAPER_TOWELS, COFFEE}
-    assert len(messenger.sent) == 2
+    assert len(sent) == 1  # one combined message, not one per item
+    assert len(composer.calls) == 1
+    [deals] = composer.calls
+    assert {d.item_id for d in deals} == {PAPER_TOWELS, COFFEE}
+    assert len(messenger.sent) == 1
     assert DISH_SOAP not in catalog.queried
     assert PAPER_TOWELS in catalog.queried
     assert COFFEE in catalog.queried

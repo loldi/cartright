@@ -35,7 +35,21 @@ class Messenger(ABC):
     (Telegram today) owns the wire details. Inbound is push-based (a webhook),
     so there is no receive method here - the web layer hands inbound text
     straight to `handle_inbound_preference`.
+
+    `parse_mode`/`button_text`/`button_url` are optional, transport-agnostic
+    extras for richer sends (e.g. Telegram's HTML formatting and inline-keyboard
+    buttons): a plain preference confirmation passes none of them and behaves
+    exactly as before. A button is only attached when both `button_text` and
+    `button_url` are given.
     """
 
     @abstractmethod
-    def send_message(self, to: str, body: str) -> None: ...
+    def send_message(
+        self,
+        to: str,
+        body: str,
+        *,
+        parse_mode: str | None = None,
+        button_text: str | None = None,
+        button_url: str | None = None,
+    ) -> None: ...

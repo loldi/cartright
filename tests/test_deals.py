@@ -85,3 +85,29 @@ def test_item_without_reference_price_is_not_a_deal() -> None:
     assert result.is_deal is False
     assert result.current_price == 5.00
     assert result.reference_price is None
+
+
+def test_product_url_is_carried_through_when_the_catalog_has_one() -> None:
+    engine = make_engine(
+        {
+            "10295020": {
+                "item_id": "10295020",
+                "price": 8.97,
+                "was_price": 10.97,
+                "in_stock": True,
+                "product_url": "https://www.walmart.com/ip/Great-Value-Paper-Towels/10295020",
+            }
+        }
+    )
+
+    result = engine.evaluateDeal("10295020")
+
+    assert result.product_url == "https://www.walmart.com/ip/Great-Value-Paper-Towels/10295020"
+
+
+def test_product_url_is_none_when_the_catalog_has_none() -> None:
+    engine = make_engine(
+        {"10295020": {"item_id": "10295020", "price": 8.97, "was_price": 10.97, "in_stock": True}}
+    )
+
+    assert engine.evaluateDeal("10295020").product_url is None

@@ -44,7 +44,6 @@ def _full_env(orders_path: str) -> dict[str, str]:
         "WM_PRIVATE_KEY": _pem_key(),
         "CARTRIGHT_USER_CHAT_ID": "987654321",
         "CARTRIGHT_ORDER_HISTORY_PATH": orders_path,
-        "CARTRIGHT_REVIEW_BASE_URL": "https://x.example.com/review",
     }
 
 

@@ -176,8 +176,6 @@ def alert_once(
     messenger: Messenger,
     *,
     user_chat_id: str,
-    review_base_url: str,
-    review_token_secret: str | None = None,
     today: date | None = None,
     out: TextIO = sys.stdout,
 ) -> int:
@@ -191,8 +189,6 @@ def alert_once(
         composer=composer,
         messenger=messenger,
         user_chat_id=user_chat_id,
-        review_base_url=review_base_url,
-        review_token_secret=review_token_secret,
         today=today,
     )
     sent = [o for o in outcomes if o.sent]
@@ -241,8 +237,6 @@ def _alert_once_cmd() -> int:  # pragma: no cover - thin from_env wiring
         ClaudeAlertComposer(),
         TelegramMessenger.from_env(),
         user_chat_id=os.environ["CARTRIGHT_USER_CHAT_ID"],
-        review_base_url=os.environ["CARTRIGHT_REVIEW_BASE_URL"],
-        review_token_secret=os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
     )
 
 

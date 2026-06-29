@@ -68,9 +68,6 @@ def _start_scheduler(
             "composer": ClaudeAlertComposer(),
             "messenger": messenger,
             "user_chat_id": os.environ["CARTRIGHT_USER_CHAT_ID"],
-            "review_base_url": os.environ["CARTRIGHT_REVIEW_BASE_URL"],
-            # Same secret the /review route verifies with, so alert links resolve.
-            "review_token_secret": os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
             "interval_seconds": interval,
         },
         daemon=True,

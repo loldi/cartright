@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from cartright.llm.alerts import DealAlert
 from cartright.scheduler import run_alert_cycle
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter
@@ -10,8 +11,6 @@ from cartright.shopping_engine.adapters.fixtures import (
     FixtureMessenger,
     FixtureOrderHistoryAdapter,
 )
-from cartright.shopping_engine.engine import ReorderCandidate
-from cartright.shopping_engine.pricing import DealEvaluation
 
 PAPER_TOWELS = "10295020"
 COFFEE = "37774610"
@@ -26,21 +25,25 @@ ORDERS = [
         "item_id": PAPER_TOWELS,
         "title": "Great Value Paper Towels, 6 Double Rolls",
         "ordered_at": "2026-06-01",
+        "price": 10.97,
     },
     {
         "item_id": PAPER_TOWELS,
         "title": "Great Value Paper Towels, 6 Double Rolls",
         "ordered_at": "2026-06-11",
+        "price": 10.97,
     },
     {
         "item_id": COFFEE,
         "title": "Folgers Classic Roast Ground Coffee, 25.9 oz",
         "ordered_at": "2026-05-01",
+        "price": 7.00,
     },
     {
         "item_id": COFFEE,
         "title": "Folgers Classic Roast Ground Coffee, 25.9 oz",
         "ordered_at": "2026-05-08",
+        "price": 7.00,
     },
 ]
 
@@ -63,10 +66,10 @@ class _FakeComposer:
 
     def __init__(self, body: str = "Deal alert!") -> None:
         self._body = body
-        self.calls: list[tuple[ReorderCandidate, DealEvaluation, str]] = []
+        self.calls: list[list[DealAlert]] = []
 
-    def compose(self, candidate: ReorderCandidate, deal: DealEvaluation, review_url: str) -> str:
-        self.calls.append((candidate, deal, review_url))
+    def compose(self, deals: list[DealAlert]) -> str:
+        self.calls.append(deals)
         return self._body
 
 
@@ -90,7 +93,6 @@ def test_out_of_window_candidate_is_never_deal_checked_or_alerted() -> None:
         composer=composer,
         messenger=messenger,
         user_chat_id="987654321",
-        review_base_url="https://example.test/review",
         today=TODAY,
     )
 
@@ -98,7 +100,7 @@ def test_out_of_window_candidate_is_never_deal_checked_or_alerted() -> None:
     assert COFFEE not in catalog.queried
 
 
-def test_in_window_deal_triggers_one_alert_linking_to_the_review_page() -> None:
+def test_in_window_deal_triggers_one_message_with_a_cart_button() -> None:
     catalog = _SpyCatalog(
         {
             PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True},
@@ -106,7 +108,7 @@ def test_in_window_deal_triggers_one_alert_linking_to_the_review_page() -> None:
         }
     )
     engine = make_engine(catalog)
-    composer = _FakeComposer(body="Paper towels are 18% off - check it out!")
+    composer = _FakeComposer(body="Hey there, paper towels dropped to $8.97.")
     messenger = FixtureMessenger()
 
     sent = run_alert_cycle(
@@ -114,19 +116,68 @@ def test_in_window_deal_triggers_one_alert_linking_to_the_review_page() -> None:
         composer=composer,
         messenger=messenger,
         user_chat_id="987654321",
-        review_base_url="https://example.test/review",
         today=TODAY,
     )
 
-    assert sent == ["Paper towels are 18% off - check it out!"]
+    assert sent == ["Hey there, paper towels dropped to $8.97."]
     assert len(composer.calls) == 1
-    candidate, deal, review_url = composer.calls[0]
-    assert candidate.item_id == PAPER_TOWELS
-    assert deal.is_deal is True
-    assert review_url == f"https://example.test/review?item={PAPER_TOWELS}"
-    assert messenger.sent == [
-        {"to": "987654321", "body": "Paper towels are 18% off - check it out!"}
+    [deals] = composer.calls
+    assert [d.item_id for d in deals] == [PAPER_TOWELS]
+    assert deals[0].current_price == 8.97
+    assert deals[0].last_paid_price == 10.97  # from real order history, not was_price
+
+    assert len(messenger.sent) == 1
+    sent_message = messenger.sent[0]
+    assert sent_message["to"] == "987654321"
+    assert sent_message["body"] == "Hey there, paper towels dropped to $8.97."
+    assert sent_message["parse_mode"] == "HTML"
+    assert sent_message["button_text"] == "Add to Walmart cart →"
+    assert (
+        sent_message["button_url"]
+        == f"https://affil.walmart.com/cart/addToCart?items={PAPER_TOWELS}_1"
+    )
+
+
+def test_multiple_in_window_deals_in_the_same_cycle_send_exactly_one_combined_message() -> None:
+    """Not N separate per-item alerts - one digest, one cart-add link covering
+    every item, one 'Add all' button label."""
+    catalog = _SpyCatalog(
+        {
+            PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True},
+            COFFEE: {"price": 5.00, "was_price": 7.00, "in_stock": True},
+        }
+    )
+    # Both items' windows now contain TODAY.
+    orders = [
+        {**ORDERS[0]},
+        {**ORDERS[1]},
+        {"item_id": COFFEE, "title": ORDERS[2]["title"], "ordered_at": "2026-06-11", "price": 7.00},
+        {"item_id": COFFEE, "title": ORDERS[2]["title"], "ordered_at": "2026-06-01", "price": 7.00},
     ]
+    engine = ShoppingEngine(order_history=FixtureOrderHistoryAdapter(orders), catalog=catalog)
+    composer = _FakeComposer(body="Hey there, 2 things dropped in price.")
+    messenger = FixtureMessenger()
+
+    sent = run_alert_cycle(
+        engine=engine,
+        composer=composer,
+        messenger=messenger,
+        user_chat_id="987654321",
+        today=TODAY,
+    )
+
+    assert sent == ["Hey there, 2 things dropped in price."]  # one message, not two
+    assert len(composer.calls) == 1
+    [deals] = composer.calls
+    assert {d.item_id for d in deals} == {PAPER_TOWELS, COFFEE}
+
+    assert len(messenger.sent) == 1  # exactly one Telegram send for the whole cycle
+    sent_message = messenger.sent[0]
+    assert sent_message["button_text"] == "Add all to Walmart cart →"
+    cart_url = sent_message["button_url"]
+    assert cart_url is not None
+    assert f"{PAPER_TOWELS}_1" in cart_url
+    assert f"{COFFEE}_1" in cart_url
 
 
 def test_no_alert_when_in_window_but_no_real_deal() -> None:
@@ -145,7 +196,6 @@ def test_no_alert_when_in_window_but_no_real_deal() -> None:
         composer=composer,
         messenger=messenger,
         user_chat_id="987654321",
-        review_base_url="https://example.test/review",
         today=TODAY,
     )
 
@@ -170,7 +220,6 @@ def test_every_candidate_is_persisted_to_the_decision_log_sent_or_not() -> None:
         composer=_FakeComposer(),
         messenger=FixtureMessenger(),
         user_chat_id="987654321",
-        review_base_url="https://example.test/review",
         today=TODAY,
     )
 
@@ -196,7 +245,6 @@ def test_a_still_active_deal_is_not_resent_on_the_next_cycle() -> None:
             composer=composer,
             messenger=messenger,
             user_chat_id="987654321",
-            review_base_url="https://example.test/review",
             today=TODAY,
         )
 
@@ -228,7 +276,6 @@ def test_a_further_price_drop_in_the_same_window_gets_a_follow_up_alert() -> Non
             composer=composer,
             messenger=messenger,
             user_chat_id="987654321",
-            review_base_url="https://example.test/review",
             today=TODAY,
         )
 
