@@ -19,6 +19,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Vulnerability scan
+        run: uv run pip-audit
+
       - name: Lint
         run: uv run ruff check .
 

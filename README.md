@@ -189,7 +189,11 @@ walmart.io, plus your personal order history). Once it's live:
   `CARTRIGHT_REVIEW_TOKEN_SECRET` is set) requires a signed, non-expired link
   token** — so a stranger who finds the URL can't drive walmart.io calls. Set
   the secret in production.
-- **Keep dependencies pinned** (`uv.lock` with hashes); update deliberately.
+- **Keep dependencies pinned** (`uv.lock` with hashes); update deliberately, not
+  automatically. When updating a dependency: review the changelog/diff, run
+  `uv sync --locked && uv run pip-audit` locally, confirm CI is green, then
+  commit the lockfile update as its own commit. CI runs `pip-audit` on every
+  push and will fail on any dependency with a known CVE.
 
 ## Deliberately excluded from this repo
 
