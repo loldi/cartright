@@ -154,3 +154,28 @@ def test_no_alert_when_in_window_but_no_real_deal() -> None:
     assert messenger.sent == []
     # It WAS checked (it's in-window) - just turned out not to be a real deal.
     assert PAPER_TOWELS in catalog.queried
+
+
+def test_every_candidate_is_persisted_to_the_decision_log_sent_or_not() -> None:
+    catalog = _SpyCatalog(
+        {
+            PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True},
+            COFFEE: {"price": 5.00, "was_price": 7.00, "in_stock": True},
+        }
+    )
+    engine = make_engine(catalog)
+
+    run_alert_cycle(
+        engine=engine,
+        composer=_FakeComposer(),
+        messenger=FixtureMessenger(),
+        user_chat_id="987654321",
+        review_base_url="https://example.test/review",
+        today=TODAY,
+    )
+
+    log = {entry.item_id: entry for entry in engine.getDecisionLog()}
+    assert log[PAPER_TOWELS].sent is True
+    assert "deal" in log[PAPER_TOWELS].reason
+    assert log[COFFEE].sent is False
+    assert "outside reorder window" in log[COFFEE].reason

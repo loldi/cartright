@@ -203,6 +203,22 @@ def alert_once(
     return 0
 
 
+def decisions(engine: ShoppingEngine, limit: int = 20, out: TextIO = sys.stdout) -> int:
+    """Print the persisted audit trail: why each recent candidate was sent or skipped.
+
+    Every real scheduler cycle and every `alert-once` run persists one row per
+    candidate via `ShoppingEngine.recordDecision`; this surfaces that history.
+    """
+    entries = engine.getDecisionLog(limit=limit)
+    if not entries:
+        print("No decisions recorded yet.", file=out)
+        return 0
+    for e in entries:
+        mark = "SENT" if e.sent else "skip"
+        print(f"{e.recorded_at}  [{mark}]  [{e.item_id}] {e.title}: {e.reason}", file=out)
+    return 0
+
+
 def _catalog_check_cmd(item_id: str) -> int:  # pragma: no cover - thin from_env wiring
     return catalog_check(WalmartCatalogPricingAdapter.from_env(), item_id)
 
@@ -230,6 +246,12 @@ def _alert_once_cmd() -> int:  # pragma: no cover - thin from_env wiring
     )
 
 
+def _decisions_cmd(limit: int) -> int:  # pragma: no cover - thin from_env wiring
+    from cartright.main import build_engine
+
+    return decisions(build_engine(), limit=limit)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="cartright", description="Cartright operator CLI.")
     sub = parser.add_subparsers(dest="command")
@@ -245,6 +267,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Destination Telegram chat id (defaults to CARTRIGHT_USER_CHAT_ID).",
     )
     sub.add_parser("alert-once", help="Run one proactive alert cycle now and report it.")
+    dec = sub.add_parser("decisions", help="Show the audited history of sent/skipped alerts.")
+    dec.add_argument(
+        "--limit", type=int, default=20, help="Max rows to show, most recent first (default 20)."
+    )
 
     args = parser.parse_args(argv)
     if args.command == "doctor":
@@ -257,6 +283,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _message_check_cmd(args.to)
     if args.command == "alert-once":
         return _alert_once_cmd()
+    if args.command == "decisions":
+        return _decisions_cmd(args.limit)
 
     parser.print_usage()
     return 2

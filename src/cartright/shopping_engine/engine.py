@@ -27,6 +27,18 @@ class Preference:
     source: str  # "inferred" or "explicit"
 
 
+@dataclass(frozen=True)
+class DecisionLogEntry:
+    """One audited row: why a reorder candidate was, or wasn't, alerted."""
+
+    recorded_at: str
+    item_id: str
+    title: str
+    sent: bool
+    reason: str
+    body: str | None
+
+
 class ShoppingEngine:
     """The single deterministic seam between the LLM layer and everything else.
 
@@ -107,3 +119,37 @@ class ShoppingEngine:
             attributes=json.loads(row["attributes"]),
             source=row["source"],
         )
+
+    def recordDecision(
+        self, *, item_id: str, title: str, sent: bool, reason: str, body: str | None
+    ) -> None:
+        """Persist why a reorder candidate was, or wasn't, alerted this cycle.
+
+        The audit trail for "why did it pick that item": every candidate the
+        scheduler considers gets a row, sent or skipped, so a real production
+        cycle can be inspected after the fact (`cartright decisions`) instead
+        of only existing for the instant it ran.
+        """
+        self._conn.execute(
+            "INSERT INTO decision_log (item_id, title, sent, reason, body) VALUES (?, ?, ?, ?, ?)",
+            (item_id, title, int(sent), reason, body),
+        )
+        self._conn.commit()
+
+    def getDecisionLog(self, limit: int = 50) -> list[DecisionLogEntry]:
+        rows = self._conn.execute(
+            "SELECT recorded_at, item_id, title, sent, reason, body "
+            "FROM decision_log ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            DecisionLogEntry(
+                recorded_at=row["recorded_at"],
+                item_id=row["item_id"],
+                title=row["title"],
+                sent=bool(row["sent"]),
+                reason=row["reason"],
+                body=row["body"],
+            )
+            for row in rows
+        ]

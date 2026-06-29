@@ -9,6 +9,16 @@ CREATE TABLE IF NOT EXISTS preferences (
     source TEXT NOT NULL CHECK (source IN ('inferred', 'explicit')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS decision_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    item_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    sent INTEGER NOT NULL CHECK (sent IN (0, 1)),
+    reason TEXT NOT NULL,
+    body TEXT
+);
 """
 
 

@@ -47,9 +47,20 @@ def run_alert_cycle_detailed(
     """
     today = today or date.today()
     outcomes: list[AlertOutcome] = []
+
+    def _record(outcome: AlertOutcome) -> None:
+        engine.recordDecision(
+            item_id=outcome.item_id,
+            title=outcome.title,
+            sent=outcome.sent,
+            reason=outcome.reason,
+            body=outcome.body,
+        )
+        outcomes.append(outcome)
+
     for candidate in engine.getReorderCandidates():
         if not _in_window(candidate, today):
-            outcomes.append(
+            _record(
                 AlertOutcome(
                     candidate.item_id,
                     candidate.title,
@@ -61,7 +72,7 @@ def run_alert_cycle_detailed(
             continue
         deal = engine.evaluateDeal(candidate.item_id)
         if not deal.is_deal:
-            outcomes.append(
+            _record(
                 AlertOutcome(
                     candidate.item_id, candidate.title, False, "in window, but no real deal", None
                 )
@@ -72,7 +83,7 @@ def run_alert_cycle_detailed(
         )
         body = composer.compose(candidate, deal, review_url)
         messenger.send_message(to=user_chat_id, body=body)
-        outcomes.append(
+        _record(
             AlertOutcome(
                 candidate.item_id, candidate.title, True, f"deal: ${deal.savings:.2f} off", body
             )
