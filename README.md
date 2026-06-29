@@ -53,6 +53,8 @@ set these as host secrets):
 | `CARTRIGHT_REVIEW_BASE_URL` | scheduler | public base URL of `/review`, used in alert links |
 | `CARTRIGHT_VALIDATE_TELEGRAM_SECRET` | app | validate `X-Telegram-Bot-Api-Secret-Token` on `/telegram`; default on, set `0` to disable |
 | `CARTRIGHT_REVIEW_TOKEN_SECRET` | app | HMAC secret for signed review links; when set, `/review` requires a valid token. Use the same value locally and on the host |
+| `CARTRIGHT_TELEGRAM_RATE_LIMIT` | app | max accepted `/telegram` updates per window (default `20`); caps live Claude spend if the webhook secret ever leaks |
+| `CARTRIGHT_TELEGRAM_RATE_WINDOW_SECONDS` | app | the above window, in seconds (default `60`) |
 | `CARTRIGHT_RUN_SCHEDULER` | app | `1` to run the alert loop in-process |
 | `CARTRIGHT_SCHEDULER_INTERVAL_SECONDS` | scheduler | alert-loop interval (default `3600`) |
 

@@ -25,6 +25,7 @@ from fastapi import FastAPI
 
 from cartright.interaction.web import create_app
 from cartright.llm.claude import ClaudeAlertComposer, ClaudePreferenceParser
+from cartright.ratelimit import RateLimiter
 from cartright.scheduler import run_forever
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.order_history import JsonFileOrderHistoryAdapter
@@ -84,6 +85,12 @@ def build_app() -> FastAPI:  # pragma: no cover - production wiring
         validate_webhook=os.environ.get("CARTRIGHT_VALIDATE_TELEGRAM_SECRET", "1") != "0",
         # When set, /review requires a valid signed token (and alert links carry one).
         review_token_secret=os.environ.get("CARTRIGHT_REVIEW_TOKEN_SECRET"),
+        # Caps /telegram throughput so a leaked webhook secret can't replay the
+        # real chat_id to flood live Claude calls. Defaults live in interaction/web.py.
+        rate_limiter=RateLimiter(
+            max_requests=int(os.environ.get("CARTRIGHT_TELEGRAM_RATE_LIMIT", "20")),
+            window_seconds=float(os.environ.get("CARTRIGHT_TELEGRAM_RATE_WINDOW_SECONDS", "60")),
+        ),
     )
 
     if os.environ.get("CARTRIGHT_RUN_SCHEDULER") == "1":

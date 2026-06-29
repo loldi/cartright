@@ -11,7 +11,8 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from cartright.review.web import RateLimiter, review_router
+from cartright.ratelimit import RateLimiter
+from cartright.review.web import review_router
 from cartright.review_links import build_review_url, sign_review_token
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import CatalogPricingAdapter

@@ -8,11 +8,19 @@ from fastapi import FastAPI, Request, Response
 from cartright.interaction.conversation import handle_inbound_preference
 from cartright.llm.preferences import PreferenceParser
 from cartright.preflight import readiness
+from cartright.ratelimit import RateLimiter
 from cartright.review.web import review_router
 from cartright.shopping_engine import ShoppingEngine
 from cartright.shopping_engine.adapters.base import Messenger
 
 _SECRET_HEADER = "X-Telegram-Bot-Api-Secret-Token"
+
+# A real user texting normally never approaches this; a leaked webhook secret
+# replaying the real chat_id to flood the endpoint (and run up live Claude API
+# spend) does. Tighter than /review's limit since every accepted update here
+# costs a live Claude completion, not just a walmart.io lookup.
+DEFAULT_TELEGRAM_MAX_REQUESTS = 20
+DEFAULT_TELEGRAM_WINDOW_SECONDS = 60.0
 
 
 def _webhook_secret_ok(expected: str | None, request: Request) -> bool:
@@ -38,6 +46,7 @@ def create_app(
     webhook_secret: str | None = None,
     validate_webhook: bool = True,
     review_token_secret: str | None = None,
+    rate_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Build the Cartright web app wired to the given dependencies.
 
@@ -48,7 +57,13 @@ def create_app(
     `validate_webhook` defaults to on (fail-closed): inbound `/telegram` updates
     must carry the matching `X-Telegram-Bot-Api-Secret-Token`, or they are
     rejected with 403. Local/test callers can pass `validate_webhook=False`.
+
+    `rate_limiter` caps accepted updates (secret valid, chat_id matches) before
+    any Claude call is made - a rejected request makes zero LLM calls.
     """
+    limiter = rate_limiter or RateLimiter(
+        max_requests=DEFAULT_TELEGRAM_MAX_REQUESTS, window_seconds=DEFAULT_TELEGRAM_WINDOW_SECONDS
+    )
     app = FastAPI(title="Cartright")
 
     @app.get("/health")
@@ -68,6 +83,8 @@ def create_app(
         text = str(message.get("text", ""))
         # Only the one private chat this instance serves; ignore everything else.
         if chat_id and chat_id == user_chat_id and text:
+            if not limiter.allow():
+                return Response(status_code=429, content="rate limit exceeded")
             handle_inbound_preference(
                 text, to=chat_id, parser=parser, engine=engine, messenger=messenger
             )

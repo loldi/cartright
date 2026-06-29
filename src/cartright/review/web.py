@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import threading
-import time
-from collections import deque
-
 from fastapi import APIRouter, Query, Response
 
+from cartright.ratelimit import RateLimiter
 from cartright.review.render import render_review
 from cartright.review_links import verify_review_token
 from cartright.shopping_engine import ShoppingEngine
@@ -14,26 +11,6 @@ from cartright.shopping_engine import ShoppingEngine
 # a handful of items). A higher count is either a mistake or an attempt to
 # amplify one request into many walmart.io calls, so it's rejected.
 DEFAULT_MAX_REVIEW_ITEMS = 25
-
-
-class RateLimiter:
-    """A tiny in-process sliding-window limiter (single instance, single user)."""
-
-    def __init__(self, max_requests: int, window_seconds: float) -> None:
-        self._max = max_requests
-        self._window = window_seconds
-        self._hits: deque[float] = deque()
-        self._lock = threading.Lock()
-
-    def allow(self, now: float | None = None) -> bool:
-        current = now if now is not None else time.monotonic()
-        with self._lock:
-            while self._hits and self._hits[0] <= current - self._window:
-                self._hits.popleft()
-            if len(self._hits) >= self._max:
-                return False
-            self._hits.append(current)
-            return True
 
 
 def review_router(
