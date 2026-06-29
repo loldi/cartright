@@ -179,3 +179,35 @@ def test_every_candidate_is_persisted_to_the_decision_log_sent_or_not() -> None:
     assert "deal" in log[PAPER_TOWELS].reason
     assert log[COFFEE].sent is False
     assert "outside reorder window" in log[COFFEE].reason
+
+
+def test_a_still_active_deal_is_not_resent_on_the_next_cycle() -> None:
+    """The actual bug: a still-on-sale item inside its window gets re-alerted on
+    every subsequent cycle (an hourly tick, or a restart) since nothing tracked
+    "already told you about this" - found live in production 2026-06-29."""
+    catalog = _SpyCatalog({PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True}})
+    engine = ShoppingEngine(order_history=FixtureOrderHistoryAdapter(ORDERS), catalog=catalog)
+    composer = _FakeComposer()
+    messenger = FixtureMessenger()
+
+    def _run_cycle() -> list[str]:
+        return run_alert_cycle(
+            engine=engine,
+            composer=composer,
+            messenger=messenger,
+            user_chat_id="987654321",
+            review_base_url="https://example.test/review",
+            today=TODAY,
+        )
+
+    first = _run_cycle()
+    second = _run_cycle()
+
+    assert first == ["Deal alert!"]
+    assert second == []  # same deal, same window - must not resend
+    assert len(messenger.sent) == 1
+    # Most recent paper-towels row (the second cycle) explains why it skipped.
+    latest_paper_towels = next(
+        e for e in engine.getDecisionLog(limit=10) if e.item_id == PAPER_TOWELS
+    )
+    assert "already alerted" in latest_paper_towels.reason

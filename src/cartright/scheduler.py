@@ -48,34 +48,52 @@ def run_alert_cycle_detailed(
     today = today or date.today()
     outcomes: list[AlertOutcome] = []
 
-    def _record(outcome: AlertOutcome) -> None:
+    def _record(candidate: ReorderCandidate, outcome: AlertOutcome) -> None:
         engine.recordDecision(
             item_id=outcome.item_id,
             title=outcome.title,
             sent=outcome.sent,
             reason=outcome.reason,
             body=outcome.body,
+            window_start=candidate.window_start,
+            window_end=candidate.window_end,
         )
         outcomes.append(outcome)
 
     for candidate in engine.getReorderCandidates():
         if not _in_window(candidate, today):
             _record(
+                candidate,
                 AlertOutcome(
                     candidate.item_id,
                     candidate.title,
                     False,
                     f"outside reorder window ({candidate.window_start}..{candidate.window_end})",
                     None,
-                )
+                ),
+            )
+            continue
+        if engine.hasAlertedInWindow(
+            candidate.item_id, candidate.window_start, candidate.window_end
+        ):
+            _record(
+                candidate,
+                AlertOutcome(
+                    candidate.item_id,
+                    candidate.title,
+                    False,
+                    "already alerted for this reorder window - not resending",
+                    None,
+                ),
             )
             continue
         deal = engine.evaluateDeal(candidate.item_id)
         if not deal.is_deal:
             _record(
+                candidate,
                 AlertOutcome(
                     candidate.item_id, candidate.title, False, "in window, but no real deal", None
-                )
+                ),
             )
             continue
         review_url = build_review_url(
@@ -84,9 +102,10 @@ def run_alert_cycle_detailed(
         body = composer.compose(candidate, deal, review_url)
         messenger.send_message(to=user_chat_id, body=body)
         _record(
+            candidate,
             AlertOutcome(
                 candidate.item_id, candidate.title, True, f"deal: ${deal.savings:.2f} off", body
-            )
+            ),
         )
     return outcomes
 

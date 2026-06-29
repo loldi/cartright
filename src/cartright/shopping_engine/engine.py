@@ -37,6 +37,8 @@ class DecisionLogEntry:
     sent: bool
     reason: str
     body: str | None
+    window_start: str
+    window_end: str
 
 
 class ShoppingEngine:
@@ -121,24 +123,36 @@ class ShoppingEngine:
         )
 
     def recordDecision(
-        self, *, item_id: str, title: str, sent: bool, reason: str, body: str | None
+        self,
+        *,
+        item_id: str,
+        title: str,
+        sent: bool,
+        reason: str,
+        body: str | None,
+        window_start: str,
+        window_end: str,
     ) -> None:
         """Persist why a reorder candidate was, or wasn't, alerted this cycle.
 
         The audit trail for "why did it pick that item": every candidate the
         scheduler considers gets a row, sent or skipped, so a real production
         cycle can be inspected after the fact (`cartright decisions`) instead
-        of only existing for the instant it ran.
+        of only existing for the instant it ran. The window is stored alongside
+        so `hasAlertedInWindow` can dedup a repeat alert for the same reorder
+        occasion (see that method's docstring).
         """
         self._conn.execute(
-            "INSERT INTO decision_log (item_id, title, sent, reason, body) VALUES (?, ?, ?, ?, ?)",
-            (item_id, title, int(sent), reason, body),
+            "INSERT INTO decision_log "
+            "(item_id, title, sent, reason, body, window_start, window_end) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (item_id, title, int(sent), reason, body, window_start, window_end),
         )
         self._conn.commit()
 
     def getDecisionLog(self, limit: int = 50) -> list[DecisionLogEntry]:
         rows = self._conn.execute(
-            "SELECT recorded_at, item_id, title, sent, reason, body "
+            "SELECT recorded_at, item_id, title, sent, reason, body, window_start, window_end "
             "FROM decision_log ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -150,6 +164,23 @@ class ShoppingEngine:
                 sent=bool(row["sent"]),
                 reason=row["reason"],
                 body=row["body"],
+                window_start=row["window_start"],
+                window_end=row["window_end"],
             )
             for row in rows
         ]
+
+    def hasAlertedInWindow(self, item_id: str, window_start: str, window_end: str) -> bool:
+        """Has a real alert already been sent for this item's *current* reorder
+        window? Backs the once-per-window dedup rule: a deal that's still active
+        on the next cycle (an hourly tick, or any restart) must not re-send the
+        same alert. A later window for the same item_id (a new reorder occasion,
+        once a new order pushes cadence forward) is unaffected - this checks the
+        exact window, not just the item.
+        """
+        row = self._conn.execute(
+            "SELECT 1 FROM decision_log "
+            "WHERE item_id = ? AND sent = 1 AND window_start = ? AND window_end = ? LIMIT 1",
+            (item_id, window_start, window_end),
+        ).fetchone()
+        return row is not None

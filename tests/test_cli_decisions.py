@@ -30,10 +30,22 @@ def test_decisions_reports_nothing_recorded_yet() -> None:
 def test_decisions_prints_recorded_rows_most_recent_first() -> None:
     engine = _engine()
     engine.recordDecision(
-        item_id="a", title="Paper Towels", sent=True, reason="deal: $2 off", body="x"
+        item_id="a",
+        title="Paper Towels",
+        sent=True,
+        reason="deal: $2 off",
+        body="x",
+        window_start="2026-01-01",
+        window_end="2026-01-03",
     )
     engine.recordDecision(
-        item_id="b", title="Coffee", sent=False, reason="outside reorder window", body=None
+        item_id="b",
+        title="Coffee",
+        sent=False,
+        reason="outside reorder window",
+        body=None,
+        window_start="2025-05-14",
+        window_end="2025-05-16",
     )
     out = io.StringIO()
 
@@ -48,7 +60,15 @@ def test_decisions_prints_recorded_rows_most_recent_first() -> None:
 def test_decisions_respects_limit() -> None:
     engine = _engine()
     for i in range(3):
-        engine.recordDecision(item_id=str(i), title=str(i), sent=False, reason="r", body=None)
+        engine.recordDecision(
+            item_id=str(i),
+            title=str(i),
+            sent=False,
+            reason="r",
+            body=None,
+            window_start="2026-01-01",
+            window_end="2026-01-03",
+        )
     out = io.StringIO()
 
     decisions(engine, limit=1, out=out)
