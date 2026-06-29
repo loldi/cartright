@@ -4,11 +4,13 @@
 real production run can be inspected after the fact, not just the instant it
 happened (see RETROSPECTIVE.md, 2026-06-29).
 
-`hasAlertedInWindow` backs the once-per-window dedup fix (RETROSPECTIVE.md,
+`lastAlertedPrice` backs the once-per-window dedup fix (RETROSPECTIVE.md,
 2026-06-29 "Duplicate alert on every scheduler tick"): without it, a still-active
 deal gets re-sent on every hourly cycle (or restart) for as long as it stays in
 its reorder window, which is exactly the spammy behavior the product is not
-supposed to be.
+supposed to be. It returns a price (not just a bool) so a *further* price drop
+within the same window still gets a follow-up alert - see
+"Re-alert on a further price drop within the same window" below.
 """
 
 from __future__ import annotations
@@ -114,11 +116,11 @@ def test_decision_log_respects_limit(engine: ShoppingEngine) -> None:
     assert [e.item_id for e in entries] == ["4", "3"]
 
 
-def test_has_not_alerted_in_window_when_nothing_recorded(engine: ShoppingEngine) -> None:
-    assert engine.hasAlertedInWindow("a", "2026-01-01", "2026-01-03") is False
+def test_last_alerted_price_is_none_when_nothing_recorded(engine: ShoppingEngine) -> None:
+    assert engine.lastAlertedPrice("a", "2026-01-01", "2026-01-03") is None
 
 
-def test_has_alerted_in_window_after_a_sent_decision(engine: ShoppingEngine) -> None:
+def test_last_alerted_price_after_a_sent_decision(engine: ShoppingEngine) -> None:
     engine.recordDecision(
         item_id="a",
         title="A",
@@ -127,9 +129,10 @@ def test_has_alerted_in_window_after_a_sent_decision(engine: ShoppingEngine) -> 
         body="alert",
         window_start="2026-01-01",
         window_end="2026-01-03",
+        price=10.97,
     )
 
-    assert engine.hasAlertedInWindow("a", "2026-01-01", "2026-01-03") is True
+    assert engine.lastAlertedPrice("a", "2026-01-01", "2026-01-03") == 10.97
 
 
 def test_skipped_decisions_do_not_count_as_alerted(engine: ShoppingEngine) -> None:
@@ -143,10 +146,10 @@ def test_skipped_decisions_do_not_count_as_alerted(engine: ShoppingEngine) -> No
         window_end="2026-01-03",
     )
 
-    assert engine.hasAlertedInWindow("a", "2026-01-01", "2026-01-03") is False
+    assert engine.lastAlertedPrice("a", "2026-01-01", "2026-01-03") is None
 
 
-def test_alerted_status_is_specific_to_the_window(engine: ShoppingEngine) -> None:
+def test_last_alerted_price_is_specific_to_the_window(engine: ShoppingEngine) -> None:
     engine.recordDecision(
         item_id="a",
         title="A",
@@ -155,8 +158,34 @@ def test_alerted_status_is_specific_to_the_window(engine: ShoppingEngine) -> Non
         body="alert",
         window_start="2026-01-01",
         window_end="2026-01-03",
+        price=10.97,
     )
 
     # A later cycle's window (e.g. after a new order pushes cadence forward) is
     # a new reorder occasion - the old alert shouldn't suppress a new one.
-    assert engine.hasAlertedInWindow("a", "2026-02-01", "2026-02-03") is False
+    assert engine.lastAlertedPrice("a", "2026-02-01", "2026-02-03") is None
+
+
+def test_last_alerted_price_reflects_the_most_recent_sent_decision(engine: ShoppingEngine) -> None:
+    engine.recordDecision(
+        item_id="a",
+        title="A",
+        sent=True,
+        reason="first alert",
+        body="x",
+        window_start="2026-01-01",
+        window_end="2026-01-03",
+        price=10.97,
+    )
+    engine.recordDecision(
+        item_id="a",
+        title="A",
+        sent=True,
+        reason="price dropped further",
+        body="y",
+        window_start="2026-01-01",
+        window_end="2026-01-03",
+        price=9.50,
+    )
+
+    assert engine.lastAlertedPrice("a", "2026-01-01", "2026-01-03") == 9.50

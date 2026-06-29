@@ -48,7 +48,9 @@ def run_alert_cycle_detailed(
     today = today or date.today()
     outcomes: list[AlertOutcome] = []
 
-    def _record(candidate: ReorderCandidate, outcome: AlertOutcome) -> None:
+    def _record(
+        candidate: ReorderCandidate, outcome: AlertOutcome, price: float | None = None
+    ) -> None:
         engine.recordDecision(
             item_id=outcome.item_id,
             title=outcome.title,
@@ -57,6 +59,7 @@ def run_alert_cycle_detailed(
             body=outcome.body,
             window_start=candidate.window_start,
             window_end=candidate.window_end,
+            price=price,
         )
         outcomes.append(outcome)
 
@@ -73,20 +76,6 @@ def run_alert_cycle_detailed(
                 ),
             )
             continue
-        if engine.hasAlertedInWindow(
-            candidate.item_id, candidate.window_start, candidate.window_end
-        ):
-            _record(
-                candidate,
-                AlertOutcome(
-                    candidate.item_id,
-                    candidate.title,
-                    False,
-                    "already alerted for this reorder window - not resending",
-                    None,
-                ),
-            )
-            continue
         deal = engine.evaluateDeal(candidate.item_id)
         if not deal.is_deal:
             _record(
@@ -96,16 +85,39 @@ def run_alert_cycle_detailed(
                 ),
             )
             continue
+        last_price = engine.lastAlertedPrice(
+            candidate.item_id, candidate.window_start, candidate.window_end
+        )
+        if (
+            last_price is not None
+            and deal.current_price is not None
+            and deal.current_price >= last_price
+        ):
+            _record(
+                candidate,
+                AlertOutcome(
+                    candidate.item_id,
+                    candidate.title,
+                    False,
+                    f"already alerted at ${last_price:.2f} or better - not resending",
+                    None,
+                ),
+            )
+            continue
         review_url = build_review_url(
             review_base_url, candidate.item_id, secret=review_token_secret
         )
         body = composer.compose(candidate, deal, review_url)
         messenger.send_message(to=user_chat_id, body=body)
+        reason = (
+            f"deal: ${deal.savings:.2f} off"
+            if last_price is None
+            else f"price dropped further to ${deal.current_price:.2f} (was ${last_price:.2f})"
+        )
         _record(
             candidate,
-            AlertOutcome(
-                candidate.item_id, candidate.title, True, f"deal: ${deal.savings:.2f} off", body
-            ),
+            AlertOutcome(candidate.item_id, candidate.title, True, reason, body),
+            price=deal.current_price,
         )
     return outcomes
 

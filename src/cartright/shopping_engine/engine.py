@@ -39,6 +39,7 @@ class DecisionLogEntry:
     body: str | None
     window_start: str
     window_end: str
+    price: float | None
 
 
 class ShoppingEngine:
@@ -132,27 +133,29 @@ class ShoppingEngine:
         body: str | None,
         window_start: str,
         window_end: str,
+        price: float | None = None,
     ) -> None:
         """Persist why a reorder candidate was, or wasn't, alerted this cycle.
 
         The audit trail for "why did it pick that item": every candidate the
         scheduler considers gets a row, sent or skipped, so a real production
         cycle can be inspected after the fact (`cartright decisions`) instead
-        of only existing for the instant it ran. The window is stored alongside
-        so `hasAlertedInWindow` can dedup a repeat alert for the same reorder
-        occasion (see that method's docstring).
+        of only existing for the instant it ran. `price` is the deal price at
+        the moment a sent alert fired - `lastAlertedPrice` uses it to decide
+        whether a further price drop in the same window is worth a follow-up.
         """
         self._conn.execute(
             "INSERT INTO decision_log "
-            "(item_id, title, sent, reason, body, window_start, window_end) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (item_id, title, int(sent), reason, body, window_start, window_end),
+            "(item_id, title, sent, reason, body, window_start, window_end, price) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (item_id, title, int(sent), reason, body, window_start, window_end, price),
         )
         self._conn.commit()
 
     def getDecisionLog(self, limit: int = 50) -> list[DecisionLogEntry]:
         rows = self._conn.execute(
-            "SELECT recorded_at, item_id, title, sent, reason, body, window_start, window_end "
+            "SELECT recorded_at, item_id, title, sent, reason, body, "
+            "window_start, window_end, price "
             "FROM decision_log ORDER BY id DESC LIMIT ?",
             (limit,),
         ).fetchall()
@@ -166,21 +169,26 @@ class ShoppingEngine:
                 body=row["body"],
                 window_start=row["window_start"],
                 window_end=row["window_end"],
+                price=row["price"],
             )
             for row in rows
         ]
 
-    def hasAlertedInWindow(self, item_id: str, window_start: str, window_end: str) -> bool:
-        """Has a real alert already been sent for this item's *current* reorder
-        window? Backs the once-per-window dedup rule: a deal that's still active
-        on the next cycle (an hourly tick, or any restart) must not re-send the
-        same alert. A later window for the same item_id (a new reorder occasion,
-        once a new order pushes cadence forward) is unaffected - this checks the
-        exact window, not just the item.
+    def lastAlertedPrice(self, item_id: str, window_start: str, window_end: str) -> float | None:
+        """The price a sent alert most recently quoted for this exact reorder
+        window, or `None` if nothing's been sent for it yet.
+
+        Backs the dedup rule: a still-active deal must not repeat on every
+        cycle (an hourly tick, or any restart) at the *same* price - but if the
+        price drops further than what was already sent, that's new information
+        worth a follow-up alert. A later window for the same item_id (a new
+        reorder occasion, once a new order pushes cadence forward) is a fresh
+        slate - this checks the exact window, not just the item.
         """
         row = self._conn.execute(
-            "SELECT 1 FROM decision_log "
-            "WHERE item_id = ? AND sent = 1 AND window_start = ? AND window_end = ? LIMIT 1",
+            "SELECT price FROM decision_log "
+            "WHERE item_id = ? AND sent = 1 AND window_start = ? AND window_end = ? "
+            "ORDER BY id DESC LIMIT 1",
             (item_id, window_start, window_end),
         ).fetchone()
-        return row is not None
+        return row["price"] if row is not None else None

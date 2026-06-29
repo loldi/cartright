@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS decision_log (
     reason TEXT NOT NULL,
     body TEXT,
     window_start TEXT NOT NULL,
-    window_end TEXT NOT NULL
+    window_end TEXT NOT NULL,
+    price REAL
 );
 """
 

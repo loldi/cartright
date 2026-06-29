@@ -211,3 +211,35 @@ def test_a_still_active_deal_is_not_resent_on_the_next_cycle() -> None:
         e for e in engine.getDecisionLog(limit=10) if e.item_id == PAPER_TOWELS
     )
     assert "already alerted" in latest_paper_towels.reason
+
+
+def test_a_further_price_drop_in_the_same_window_gets_a_follow_up_alert() -> None:
+    """Andrew's exact scenario: an alert already fired for this window, but the
+    price has since dropped even lower - that's new information, worth a second
+    alert, unlike a repeat at the same (or worse) price."""
+    catalog = _SpyCatalog({PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True}})
+    engine = ShoppingEngine(order_history=FixtureOrderHistoryAdapter(ORDERS), catalog=catalog)
+    composer = _FakeComposer()
+    messenger = FixtureMessenger()
+
+    def _run_cycle() -> list[str]:
+        return run_alert_cycle(
+            engine=engine,
+            composer=composer,
+            messenger=messenger,
+            user_chat_id="987654321",
+            review_base_url="https://example.test/review",
+            today=TODAY,
+        )
+
+    first = _run_cycle()
+    catalog._prices[PAPER_TOWELS] = {"price": 7.50, "was_price": 10.97, "in_stock": True}
+    second = _run_cycle()
+    catalog._prices[PAPER_TOWELS] = {"price": 7.50, "was_price": 10.97, "in_stock": True}
+    third = _run_cycle()  # same price as the follow-up - must not alert a third time
+
+    assert first == ["Deal alert!"]
+    assert second == ["Deal alert!"]  # price dropped further: 8.97 -> 7.50
+    assert third == []
+    assert len(messenger.sent) == 2
+    assert engine.lastAlertedPrice(PAPER_TOWELS, "2026-06-20", "2026-06-22") == 7.50
