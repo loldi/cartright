@@ -36,10 +36,24 @@ from cartright.shopping_engine.adapters.walmart import WalmartCatalogPricingAdap
 def build_engine() -> ShoppingEngine:  # pragma: no cover - production wiring
     """Assemble the engine on real adapters and a file-backed SQLite store."""
     return ShoppingEngine(
-        order_history=JsonFileOrderHistoryAdapter.from_env(),
+        order_history=_load_order_history(),
         catalog=WalmartCatalogPricingAdapter.from_env(),
         db_path=os.environ.get("CARTRIGHT_DB_PATH", "cartright.db"),
     )
+
+
+def _load_order_history() -> JsonFileOrderHistoryAdapter:  # pragma: no cover
+    """Boot with empty order history if the scrape file isn't on disk yet.
+
+    The file lives on the persistent disk and is uploaded out-of-band (scp)
+    after the first deploy - a missing file at boot is an expected transient
+    state, not a reason to take the Telegram webhook and health check down
+    with it. `readiness()` already reports this gap via `order_history_present`.
+    """
+    try:
+        return JsonFileOrderHistoryAdapter.from_env()
+    except FileNotFoundError:
+        return JsonFileOrderHistoryAdapter(orders=[])
 
 
 def _start_scheduler(
