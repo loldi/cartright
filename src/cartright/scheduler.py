@@ -115,17 +115,34 @@ def run_alert_cycle_detailed(
 
     if to_alert:
         deal_alerts = [d for _, d, _ in to_alert]
-        body = composer.compose(deal_alerts)
-        button_text = (
-            "Add to Walmart cart →" if len(deal_alerts) == 1 else "Add all to Walmart cart →"
-        )
-        messenger.send_message(
-            to=user_chat_id,
-            body=body,
-            parse_mode="HTML",
-            button_text=button_text,
-            button_url=_cart_url(deal_alerts),
-        )
+        try:
+            body = composer.compose(deal_alerts)
+            button_text = (
+                "Add to Walmart cart →" if len(deal_alerts) == 1 else "Add all to Walmart cart →"
+            )
+            messenger.send_message(
+                to=user_chat_id,
+                body=body,
+                parse_mode="HTML",
+                button_text=button_text,
+                button_url=_cart_url(deal_alerts),
+            )
+        except Exception as exc:  # noqa: BLE001 - surface per-item, never crash the cycle
+            error_reason = f"send failed: {type(exc).__name__}"
+            for candidate, _deal_alert, _ in to_alert:
+                engine.recordDecision(
+                    item_id=candidate.item_id,
+                    title=candidate.title,
+                    sent=False,
+                    reason=error_reason,
+                    body=None,
+                    window_start=candidate.window_start,
+                    window_end=candidate.window_end,
+                )
+                outcomes.append(
+                    AlertOutcome(candidate.item_id, candidate.title, False, error_reason, None)
+                )
+            return outcomes
         for candidate, deal_alert, last_alerted in to_alert:
             reason = (
                 f"deal: ${deal_alert.savings:.2f} off"

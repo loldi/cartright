@@ -18,7 +18,7 @@ from pathlib import Path
 import httpx
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from cartright.cli import catalog_check, message_check, orders_check
+from cartright.cli import catalog_check, message_check, orders_check, orders_check_file
 from cartright.shopping_engine.adapters.base import Messenger
 from cartright.shopping_engine.adapters.order_history import JsonFileOrderHistoryAdapter
 from cartright.shopping_engine.adapters.telegram import TelegramMessenger
@@ -201,3 +201,89 @@ def test_message_check_error_output_never_leaks_the_token() -> None:
     assert "SECRETTOKEN" not in text
     assert "api.telegram.org" not in text
     assert "401" in text  # status is fine to show
+
+
+# ---- operator-seat tests (write real files / use real mock transports) ------
+#
+# Each test below exercises the failure path an operator would actually hit:
+# a real file written to disk, or a mock transport returning the live failure
+# shape, rather than in-memory fixtures or monkeypatched os.environ.
+
+
+def test_catalog_check_401_gives_readable_message_no_signature_leak() -> None:
+    """Auth rejection (wrong/unregistered key) must not leak WM_SEC headers."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"errors": [{"message": "Unauthorized", "code": 4001}]})
+
+    out = io.StringIO()
+    code = catalog_check(_catalog_adapter(handler), "10295020", out=out)
+
+    text = out.getvalue()
+    assert code == 1
+    # Operator gets a hint to check credentials, never a raw signature value.
+    assert "WM_SEC" not in text
+    assert "AUTH_SIGNATURE" not in text
+    # The message should mention credentials/doctor, not be an opaque KeyError.
+    assert "doctor" in text.lower() or "credentials" in text.lower()
+
+
+def test_orders_check_malformed_json_gives_clear_message(tmp_path: Path) -> None:
+    """A file with broken JSON must produce a readable error, not a traceback."""
+    bad = tmp_path / "orders.json"
+    bad.write_text("{this is not json", encoding="utf-8")
+
+    out = io.StringIO()
+    code = orders_check_file(bad, out=out)
+
+    text = out.getvalue().lower()
+    assert code == 1
+    assert "invalid json" in text
+
+
+def test_orders_check_non_array_json_gives_clear_message(tmp_path: Path) -> None:
+    """A JSON object instead of array must produce a readable error."""
+    bad = tmp_path / "orders.json"
+    bad.write_text('{"item_id": "123"}', encoding="utf-8")
+
+    out = io.StringIO()
+    code = orders_check_file(bad, out=out)
+
+    text = out.getvalue().lower()
+    assert code == 1
+    assert "malformed" in text or "array" in text
+
+
+def test_orders_check_missing_file_gives_clear_message(tmp_path: Path) -> None:
+    """A path that does not exist must produce a readable error, not a FileNotFoundError."""
+    missing = tmp_path / "does_not_exist.json"
+
+    out = io.StringIO()
+    code = orders_check_file(missing, out=out)
+
+    text = out.getvalue().lower()
+    assert code == 1
+    assert "not accessible" in text or "not found" in text
+
+
+def test_message_check_real_401_response_never_leaks_token() -> None:
+    """TelegramMessenger's own error path must not leak the bot token on a 401."""
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            401, json={"ok": False, "description": "Unauthorized", "error_code": 401}
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    adapter = TelegramMessenger(
+        "123456:REALSECRETTOKEN", client=client, api_base="https://api.telegram.test"
+    )
+    out = io.StringIO()
+
+    code = message_check(adapter, "987654321", out=out)
+
+    text = out.getvalue()
+    assert code == 1
+    assert "REALSECRETTOKEN" not in text
+    assert "api.telegram.test" not in text  # URL carrying the token must not appear
+    assert "failed" in text.lower()  # operator gets a readable failure message

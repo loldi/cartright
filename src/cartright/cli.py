@@ -16,10 +16,12 @@ environment variables (e.g. host secrets) always win - `.env` only fills gaps.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from collections.abc import Sequence
 from datetime import date
+from pathlib import Path
 from typing import TextIO
 
 from dotenv import find_dotenv, load_dotenv
@@ -158,6 +160,31 @@ def orders_check(adapter: OrderHistoryAdapter, out: TextIO = sys.stdout) -> int:
     return 0
 
 
+def orders_check_file(path: str | Path, out: TextIO = sys.stdout) -> int:
+    """Operator-seat wrapper: load orders from a real file, handling parse errors gracefully.
+
+    Wraps `JsonFileOrderHistoryAdapter.from_file` so that invalid JSON, non-array
+    content, and missing files all produce a readable one-line error (not a traceback)
+    before delegating to `orders_check` for the content-level validation.
+    """
+    try:
+        adapter = JsonFileOrderHistoryAdapter.from_file(path)
+    except json.JSONDecodeError as exc:
+        print(
+            f"order-history file contains invalid JSON: {exc.msg} (line {exc.lineno}). "
+            "Check the file is valid JSON, then re-run.",
+            file=out,
+        )
+        return 1
+    except ValueError as exc:
+        print(f"order-history file is malformed: {exc}", file=out)
+        return 1
+    except (FileNotFoundError, OSError) as exc:
+        print(f"order-history file not accessible: {exc}", file=out)
+        return 1
+    return orders_check(adapter, out=out)
+
+
 def message_check(messenger: Messenger, to: str, out: TextIO = sys.stdout) -> int:
     """GL-4: send one real test message to confirm the Telegram wiring works."""
     body = "Cartright test message - if you got this, your messaging wiring works."
@@ -220,7 +247,7 @@ def _catalog_check_cmd(item_id: str) -> int:  # pragma: no cover - thin from_env
 
 
 def _orders_check_cmd() -> int:  # pragma: no cover - thin from_env wiring
-    return orders_check(JsonFileOrderHistoryAdapter.from_env())
+    return orders_check_file(os.environ["CARTRIGHT_ORDER_HISTORY_PATH"])
 
 
 def _message_check_cmd(to: str | None) -> int:  # pragma: no cover - thin from_env wiring

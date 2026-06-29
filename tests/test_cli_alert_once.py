@@ -96,3 +96,65 @@ def test_alert_once_sends_nothing_when_no_deal() -> None:
     assert code == 0
     assert "0 sent" in out.getvalue()
     assert messenger.sent == []
+
+
+# ---- operator-seat: partial failure paths -----------------------------------
+
+
+class _BoomComposer:
+    def compose(self, deals: list[DealAlert]) -> str:
+        raise RuntimeError("Claude API unavailable")
+
+
+class _BoomMessenger(FixtureMessenger):
+    def send_message(
+        self,
+        to: str,
+        body: str,
+        *,
+        parse_mode: str | None = None,
+        button_text: str | None = None,
+        button_url: str | None = None,
+    ) -> None:
+        raise RuntimeError("Telegram send failed")
+
+
+def test_alert_once_composer_error_reports_per_item_not_traceback() -> None:
+    """If compose() raises, the cycle reports each in-window item as failed, not a crash."""
+    engine = _engine({PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True}})
+    out = io.StringIO()
+
+    code = alert_once(
+        engine,
+        _BoomComposer(),
+        FixtureMessenger(),
+        user_chat_id="987654321",
+        today=TODAY,
+        out=out,
+    )
+
+    text = out.getvalue()
+    assert code == 0  # alert-once itself is not an error; the cycle ran
+    assert "0 sent" in text
+    assert any(phrase in text.lower() for phrase in ("runtimeerror", "send failed", "failed"))
+    assert f"[{PAPER_TOWELS}]" in text  # item is listed (as failed/skipped)
+
+
+def test_alert_once_messenger_error_reports_per_item_not_traceback() -> None:
+    """If send_message() raises, the cycle reports each in-window item as failed, not a crash."""
+    engine = _engine({PAPER_TOWELS: {"price": 8.97, "was_price": 10.97, "in_stock": True}})
+    out = io.StringIO()
+
+    code = alert_once(
+        engine,
+        _FakeComposer(),
+        _BoomMessenger(),
+        user_chat_id="987654321",
+        today=TODAY,
+        out=out,
+    )
+
+    text = out.getvalue()
+    assert code == 0
+    assert "0 sent" in text
+    assert f"[{PAPER_TOWELS}]" in text

@@ -230,3 +230,23 @@ credentials.** The catalog adapter's and the Telegram messenger's HTTP clients
 are both injectable, so their tests serve canned responses
 (`httpx.MockTransport`). The production entrypoint (`cartright.main`) is thin
 wiring with no logic of its own and is intentionally untested.
+
+### Go-live check command pattern
+
+Each `cartright <cmd>` check command (doctor, catalog-check, orders-check,
+message-check, alert-once) must pass an **operator-seat acceptance criterion**:
+
+> With a realistic live failure injected — bad credentials, malformed file,
+> network rejection — `cartright <cmd>` produces a clear, secret-free,
+> non-zero-exit message (not a traceback or a `KeyError`), proven by a test
+> that writes a real file or uses a mock transport returning the failure-shape
+> response, rather than monkeypatching `os.environ`.
+
+The tells to watch for when adding a new check command:
+
+- The entire test suite uses in-memory fixtures and never creates the file the
+  command is named after (e.g., the order-history file).
+- A bad credential produces the same output as "item not found" with no hint
+  to recheck config.
+- An exception from a third-party SDK (Anthropic, httpx) propagates as a raw
+  traceback rather than a sanitized one-liner.
