@@ -79,8 +79,8 @@ Structure, exactly:
 1. Open with a short, casual one-line greeting (e.g. "Hey there,").
 2. One deal: a single line - the item name as a bold hyperlink
    (<b><a href="PRODUCT_URL">Name</a></b>), then the price bold, then a plain
-   parenthetical: "(you paid $X last time — save $Y)" if a last-paid price is
-   given, otherwise "(was $X — save $Y)" using the reference price instead.
+   parenthetical: "(you paid $X last time, save $Y)" if a last-paid price is
+   given, otherwise "(was $X, save $Y)" using the reference price instead.
    More than one deal: a short intro line, then each item on its own bullet
    line ("• ") in that same shape.
 3. End with one short, plain paragraph (no bold/italic/links) giving the
